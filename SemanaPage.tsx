@@ -19,7 +19,7 @@ import AnilloProgreso from "./AnilloProgreso";
 import GraficoSemana from "./GraficoSemana";
 import TarjetaDia from "./TarjetaDia";
 
-type Props = { almacen: Almacen };
+type Props = { almacen: Almacen; lunes: Date; onLunes: (lunes: Date) => void };
 
 function nombreSemana(lunes: Date): string {
   const diferencia = Math.round((lunes.getTime() - lunesDe(new Date()).getTime()) / (7 * 864e5));
@@ -29,8 +29,7 @@ function nombreSemana(lunes: Date): string {
   return diferencia < 0 ? `Hace ${-diferencia} semanas` : `Dentro de ${diferencia} semanas`;
 }
 
-export default function SemanaPage({ almacen }: Props) {
-  const [lunes, setLunes] = useState(() => lunesDe(new Date()));
+export default function SemanaPage({ almacen, lunes, onLunes: setLunes }: Props) {
   const [aviso, setAviso] = useState("");
   const [confirmarLimpiar, setConfirmarLimpiar] = useState(false);
 
