@@ -15,10 +15,21 @@ export default function App() {
 
   return (
     <Layout actual={pantalla} onCambiar={setPantalla} tema={tema} onTema={setTema}>
-      {pantalla === "semana" && <SemanaPage almacen={almacen} />}
-      {pantalla === "mes" && <MesPage />}
-      {pantalla === "historial" && <HistorialPage />}
-      {pantalla === "ajustes" && <AjustesPage tema={tema} onTema={setTema} />}
+      {almacen.errorGuardado && (
+        <p role="alert" className="mb-5 rounded-xl bg-pendiente/15 px-4 py-3 text-sm font-semibold text-pendiente">
+          {almacen.errorGuardado}
+        </p>
+      )}
+      {almacen.cargando ? (
+        <p className="py-20 text-center text-suave">Cargando tus horas…</p>
+      ) : (
+        <>
+          {pantalla === "semana" && <SemanaPage almacen={almacen} />}
+          {pantalla === "mes" && <MesPage />}
+          {pantalla === "historial" && <HistorialPage />}
+          {pantalla === "ajustes" && <AjustesPage tema={tema} onTema={setTema} almacen={almacen} />}
+        </>
+      )}
     </Layout>
   );
 }

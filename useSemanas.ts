@@ -1,7 +1,16 @@
-// Guarda las semanas mientras la aplicación está abierta.
-// En la fase 4 este archivo pasará a guardarlas en el dispositivo.
-import { useCallback, useState } from "react";
-import { fechaISO, lunesDe, semanaNueva, type Jornada, type Semana } from "./calculos";
+// Mantiene las semanas en pantalla y las guarda en el dispositivo cada vez que cambian.
+import { useCallback, useEffect, useState } from "react";
+import { fechaISO, lunesDe, semanaNueva, type Semana } from "./calculos";
+import {
+  AJUSTES_INICIALES,
+  guardarAjustes,
+  guardarSemana,
+  leerTodo,
+  pedirGuardadoPermanente,
+  reemplazarSemanas,
+  type Ajustes,
+} from "./baseDatos";
+import type { Copia } from "./copia";
 
 function semanaDeEjemplo(): Semana {
   const s = semanaNueva(new Date(), 37.5, true);
@@ -16,37 +25,106 @@ function semanaDeEjemplo(): Semana {
 }
 
 export type Almacen = {
+  cargando: boolean;
+  errorGuardado: string;
+  ajustes: Ajustes;
+  semanas: Semana[];
   obtener: (lunes: Date) => Semana;
   guardar: (semana: Semana) => void;
+  cambiarAjustes: (cambios: Partial<Ajustes>) => void;
   hayEjemplo: boolean;
   borrarEjemplo: () => void;
+  importar: (copia: Copia) => Promise<void>;
+  borrarTodo: () => Promise<void>;
 };
 
 export function useSemanas(): Almacen {
-  const [semanas, setSemanas] = useState<Record<string, Semana>>(() => {
-    const e = semanaDeEjemplo();
-    return { [e.lunes]: e };
-  });
-  const [hayEjemplo, setHayEjemplo] = useState(true);
-  const [jornadaPorDefecto, setJornadaPorDefecto] = useState<Jornada>(37.5);
-  const [contarPorDefecto, setContarPorDefecto] = useState(true);
+  const [cargando, setCargando] = useState(true);
+  const [errorGuardado, setErrorGuardado] = useState("");
+  const [mapa, setMapa] = useState<Record<string, Semana>>({});
+  const [ajustes, setAjustes] = useState<Ajustes>(AJUSTES_INICIALES);
+  const [ejemplo, setEjemplo] = useState<Semana | null>(null);
+
+  const fallo = () =>
+    setErrorGuardado("No se han podido guardar los cambios en este dispositivo. Haz una copia de seguridad desde Ajustes.");
+
+  // Al abrir la aplicación: leer lo guardado
+  useEffect(() => {
+    pedirGuardadoPermanente();
+    leerTodo()
+      .then(({ semanas, ajustes: a }) => {
+        setMapa(Object.fromEntries(semanas.map((s) => [s.lunes, s])));
+        setAjustes(a);
+        if (!a.ejemploVisto && semanas.length === 0) setEjemplo(semanaDeEjemplo());
+      })
+      .catch(() => {
+        setErrorGuardado("Este navegador no permite guardar datos. Lo que escribas se perderá al cerrar.");
+        setEjemplo(semanaDeEjemplo());
+      })
+      .finally(() => setCargando(false));
+  }, []);
+
+  const cambiarAjustes = useCallback((cambios: Partial<Ajustes>) => {
+    setAjustes((prev) => {
+      const nuevos = { ...prev, ...cambios };
+      guardarAjustes(nuevos).catch(fallo);
+      return nuevos;
+    });
+  }, []);
 
   const obtener = useCallback(
-    (lunes: Date) => semanas[fechaISO(lunesDe(lunes))] ?? semanaNueva(lunes, jornadaPorDefecto, contarPorDefecto),
-    [semanas, jornadaPorDefecto, contarPorDefecto],
+    (lunes: Date) => {
+      const clave = fechaISO(lunesDe(lunes));
+      if (ejemplo && ejemplo.lunes === clave) return ejemplo;
+      return mapa[clave] ?? semanaNueva(lunes, ajustes.jornadaPorDefecto, ajustes.contarPorDefecto);
+    },
+    [mapa, ajustes, ejemplo],
   );
 
-  const guardar = useCallback((semana: Semana) => {
-    setSemanas((prev) => ({ ...prev, [semana.lunes]: semana }));
-    setJornadaPorDefecto(semana.jornada);
-    setContarPorDefecto(semana.contarAusencias);
-    setHayEjemplo(false);
-  }, []);
+  const guardar = useCallback(
+    (semana: Semana) => {
+      setMapa((prev) => ({ ...prev, [semana.lunes]: semana }));
+      setEjemplo(null);
+      guardarSemana(semana).catch(fallo);
+      // Regla 1: la última jornada elegida pasa a ser la de por defecto
+      cambiarAjustes({ jornadaPorDefecto: semana.jornada, contarPorDefecto: semana.contarAusencias, ejemploVisto: true });
+    },
+    [cambiarAjustes],
+  );
 
   const borrarEjemplo = useCallback(() => {
-    setSemanas({});
-    setHayEjemplo(false);
-  }, []);
+    setEjemplo(null);
+    cambiarAjustes({ ejemploVisto: true });
+  }, [cambiarAjustes]);
 
-  return { obtener, guardar, hayEjemplo, borrarEjemplo };
+  const importar = useCallback(
+    async (copia: Copia) => {
+      await reemplazarSemanas(copia.semanas);
+      setMapa(Object.fromEntries(copia.semanas.map((s) => [s.lunes, s])));
+      setEjemplo(null);
+      cambiarAjustes({ ...copia.ajustes, ejemploVisto: true });
+    },
+    [cambiarAjustes],
+  );
+
+  const borrarTodo = useCallback(async () => {
+    await reemplazarSemanas([]);
+    setMapa({});
+    setEjemplo(null);
+    cambiarAjustes({ ...AJUSTES_INICIALES, ejemploVisto: true });
+  }, [cambiarAjustes]);
+
+  return {
+    cargando,
+    errorGuardado,
+    ajustes,
+    semanas: Object.values(mapa),
+    obtener,
+    guardar,
+    cambiarAjustes,
+    hayEjemplo: ejemplo !== null,
+    borrarEjemplo,
+    importar,
+    borrarTodo,
+  };
 }
