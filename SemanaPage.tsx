@@ -175,6 +175,22 @@ export default function SemanaPage({ almacen, lunes, onLunes: setLunes }: Props)
         </div>
       </section>
 
+      {semana.dias.some((d) => d.tipo === "libranza") && (() => {
+        const libres = r.dias.filter((d, i) => d.estado === "sin-registrar" && semana.dias[i]?.tipo === "trabajo").length;
+        return (
+          <p className="rounded-2xl border border-ausencia/30 bg-ausencia/10 px-4 py-3 text-sm font-medium">
+            <span className="font-bold text-ausencia">Semana con libranza.</span>{" "}
+            {r.faltan === 0
+              ? "Ya has hecho todas las horas de la semana."
+              : libres > 0
+                ? libres === 1
+                  ? `Te faltan ${formatoHoras(r.faltan)} en el día que te queda por registrar.`
+                  : `Te faltan ${formatoHoras(r.faltan)}: unos ${formatoHoras(Math.ceil(r.faltan / libres))} de media en los ${libres} días que te quedan por registrar.`
+                : `Te faltan ${formatoHoras(r.faltan)} para completar la semana.`}
+          </p>
+        );
+      })()}
+
       {/* Días */}
       <section className="grid gap-3" aria-label="Horario diario">
         {semana.dias.map((d, i) => {

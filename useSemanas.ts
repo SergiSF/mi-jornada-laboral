@@ -8,8 +8,11 @@ import {
   leerTodo,
   pedirGuardadoPermanente,
   reemplazarSemanas,
+  guardarSaldos,
   type Ajustes,
+  type Saldos,
 } from "./baseDatos";
+import { SALDO_VACIO, type SaldoAnual } from "./saldos";
 import type { Copia } from "./copia";
 
 function semanaDeEjemplo(): Semana {
@@ -29,6 +32,9 @@ export type Almacen = {
   errorGuardado: string;
   ajustes: Ajustes;
   semanas: Semana[];
+  saldo: (anio: number) => SaldoAnual;
+  cambiarSaldo: (anio: number, saldo: SaldoAnual) => void;
+  saldos: Saldos;
   obtener: (lunes: Date) => Semana;
   guardar: (semana: Semana) => void;
   cambiarAjustes: (cambios: Partial<Ajustes>) => void;
@@ -44,6 +50,7 @@ export function useSemanas(): Almacen {
   const [mapa, setMapa] = useState<Record<string, Semana>>({});
   const [ajustes, setAjustes] = useState<Ajustes>(AJUSTES_INICIALES);
   const [ejemplo, setEjemplo] = useState<Semana | null>(null);
+  const [saldos, setSaldos] = useState<Saldos>({});
 
   const fallo = () =>
     setErrorGuardado("No se han podido guardar los cambios en este dispositivo. Haz una copia de seguridad desde Ajustes.");
@@ -52,7 +59,8 @@ export function useSemanas(): Almacen {
   useEffect(() => {
     pedirGuardadoPermanente();
     leerTodo()
-      .then(({ semanas, ajustes: a }) => {
+      .then(({ semanas, ajustes: a, saldos: sal }) => {
+        setSaldos(sal);
         setMapa(Object.fromEntries(semanas.map((s) => [s.lunes, s])));
         setAjustes(a);
         if (!a.ejemploVisto && semanas.length === 0) setEjemplo(semanaDeEjemplo());
@@ -69,6 +77,16 @@ export function useSemanas(): Almacen {
       const nuevos = { ...prev, ...cambios };
       guardarAjustes(nuevos).catch(fallo);
       return nuevos;
+    });
+  }, []);
+
+  const saldo = useCallback((anio: number) => saldos[String(anio)] ?? SALDO_VACIO, [saldos]);
+
+  const cambiarSaldo = useCallback((anio: number, nuevo: SaldoAnual) => {
+    setSaldos((prev) => {
+      const todos = { ...prev, [String(anio)]: nuevo };
+      guardarSaldos(todos).catch(fallo);
+      return todos;
     });
   }, []);
 
@@ -100,6 +118,8 @@ export function useSemanas(): Almacen {
   const importar = useCallback(
     async (copia: Copia) => {
       await reemplazarSemanas(copia.semanas);
+      await guardarSaldos(copia.saldos);
+      setSaldos(copia.saldos);
       setMapa(Object.fromEntries(copia.semanas.map((s) => [s.lunes, s])));
       setEjemplo(null);
       cambiarAjustes({ ...copia.ajustes, ejemploVisto: true });
@@ -109,6 +129,8 @@ export function useSemanas(): Almacen {
 
   const borrarTodo = useCallback(async () => {
     await reemplazarSemanas([]);
+    await guardarSaldos({});
+    setSaldos({});
     setMapa({});
     setEjemplo(null);
     cambiarAjustes({ ...AJUSTES_INICIALES, ejemploVisto: true });
@@ -119,6 +141,9 @@ export function useSemanas(): Almacen {
     errorGuardado,
     ajustes,
     semanas: Object.values(mapa),
+    saldo,
+    cambiarSaldo,
+    saldos,
     obtener,
     guardar,
     cambiarAjustes,

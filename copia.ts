@@ -1,6 +1,7 @@
 // Copias de seguridad: convertir los datos en un archivo JSON y leerlos de vuelta.
 import type { Jornada, RegistroDia, Semana, TipoDia } from "./calculos";
-import { AJUSTES_INICIALES, type Ajustes } from "./baseDatos";
+import { AJUSTES_INICIALES, type Ajustes, type Saldos } from "./baseDatos";
+import { SALDO_VACIO, type SaldoAnual } from "./saldos";
 
 export type Copia = {
   aplicacion: "mi-jornada";
@@ -8,19 +9,21 @@ export type Copia = {
   exportado: string;
   ajustes: Ajustes;
   semanas: Semana[];
+  saldos: Saldos;
 };
 
-export function crearCopia(semanas: Semana[], ajustes: Ajustes, ahora: Date): Copia {
+export function crearCopia(semanas: Semana[], ajustes: Ajustes, saldos: Saldos, ahora: Date): Copia {
   return {
     aplicacion: "mi-jornada",
     version: 1,
     exportado: ahora.toISOString(),
     ajustes,
     semanas: [...semanas].sort((a, b) => a.lunes.localeCompare(b.lunes)),
+    saldos,
   };
 }
 
-const TIPOS: TipoDia[] = ["trabajo", "festivo", "vacaciones", "asuntos-propios", "baja"];
+const TIPOS: TipoDia[] = ["trabajo", "festivo", "vacaciones", "asuntos-propios", "ap-recuperables", "dr", "libranza", "baja"];
 const esObjeto = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
 const esHora = (v: unknown) => typeof v === "string" && (v === "" || /^\d{1,2}:\d{2}$/.test(v));
 const esJornada = (v: unknown): v is Jornada => v === 35 || v === 37.5;
@@ -30,9 +33,10 @@ function leerDia(v: unknown): RegistroDia | null {
   if (!esHora(v.entrada) || !esHora(v.salida)) return null;
   if (typeof v.pausa !== "number" || !TIPOS.includes(v.tipo as TipoDia)) return null;
   const dia: RegistroDia = { entrada: v.entrada as string, salida: v.salida as string, pausa: v.pausa, tipo: v.tipo as TipoDia };
-  if (v.minutosAsuntosPropios !== undefined) {
-    if (typeof v.minutosAsuntosPropios !== "number") return null;
-    dia.minutosAsuntosPropios = v.minutosAsuntosPropios;
+  for (const campo of ["minutosPermiso", "minutosRecuperacion", "minutosAsuntosPropios"] as const) {
+    if (v[campo] === undefined) continue;
+    if (typeof v[campo] !== "number") return null;
+    dia[campo] = v[campo] as number;
   }
   return dia;
 }
@@ -69,6 +73,17 @@ export function leerCopia(texto: string): { ok: true; copia: Copia } | { ok: fal
     contarPorDefecto: typeof a.contarPorDefecto === "boolean" ? a.contarPorDefecto : AJUSTES_INICIALES.contarPorDefecto,
     ejemploVisto: true,
   };
+  const saldos: Saldos = {};
+  if (esObjeto(datos.saldos)) {
+    for (const [anio, valor] of Object.entries(datos.saldos)) {
+      if (!/^\d{4}$/.test(anio) || !esObjeto(valor)) continue;
+      const leido: SaldoAnual = { ...SALDO_VACIO };
+      for (const k of Object.keys(SALDO_VACIO) as (keyof SaldoAnual)[]) {
+        if (typeof valor[k] === "number" && valor[k] >= 0) leido[k] = valor[k] as number;
+      }
+      saldos[anio] = leido;
+    }
+  }
   return {
     ok: true,
     copia: {
@@ -77,6 +92,7 @@ export function leerCopia(texto: string): { ok: true; copia: Copia } | { ok: fal
       exportado: typeof datos.exportado === "string" ? datos.exportado : "",
       ajustes,
       semanas: semanas as Semana[],
+      saldos,
     },
   };
 }

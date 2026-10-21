@@ -62,7 +62,7 @@ export default function Layout({ actual, onCambiar, tema, onTema, children }: Pr
       {/* Menú inferior: solo en móvil */}
       <nav
         aria-label="Secciones"
-        className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-4 border-t border-borde bg-superficie/95 backdrop-blur md:hidden"
+        className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-5 border-t border-borde bg-superficie/95 backdrop-blur md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
         {PANTALLAS.map(({ id, nombre, icono: Icono }) => {
@@ -72,7 +72,7 @@ export default function Layout({ actual, onCambiar, tema, onTema, children }: Pr
               key={id}
               onClick={() => onCambiar(id)}
               aria-current={activo ? "page" : undefined}
-              className={`flex flex-col items-center gap-1 py-2.5 text-xs font-semibold ${activo ? "text-principal" : "text-suave"}`}
+              className={`flex flex-col items-center gap-1 py-2.5 text-[11px] font-semibold ${activo ? "text-principal" : "text-suave"}`}
             >
               <Icono size={22} />
               {nombre}

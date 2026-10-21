@@ -4,6 +4,7 @@ import SemanaPage from "./SemanaPage";
 import MesPage from "./MesPage";
 import HistorialPage from "./HistorialPage";
 import AjustesPage from "./AjustesPage";
+import SaldosPage from "./SaldosPage";
 import { useTema } from "./tema";
 import { useSemanas } from "./useSemanas";
 import { lunesDe } from "./calculos";
@@ -12,6 +13,7 @@ import type { Pantalla } from "./navegacion";
 export default function App() {
   const [pantalla, setPantalla] = useState<Pantalla>("semana");
   const [lunesSemana, setLunesSemana] = useState(() => lunesDe(new Date()));
+  const [anioSaldos, setAnioSaldos] = useState(() => new Date().getFullYear());
   const { tema, setTema } = useTema();
   const almacen = useSemanas();
 
@@ -36,6 +38,7 @@ export default function App() {
           {pantalla === "semana" && <SemanaPage almacen={almacen} lunes={lunesSemana} onLunes={setLunesSemana} />}
           {pantalla === "mes" && <MesPage almacen={almacen} onIrASemana={irASemana} />}
           {pantalla === "historial" && <HistorialPage almacen={almacen} onIrASemana={irASemana} />}
+          {pantalla === "saldos" && <SaldosPage almacen={almacen} anio={anioSaldos} onAnio={setAnioSaldos} />}
           {pantalla === "ajustes" && <AjustesPage tema={tema} onTema={setTema} almacen={almacen} />}
         </>
       )}

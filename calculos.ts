@@ -4,15 +4,33 @@
 
 export type Jornada = 35 | 37.5;
 
-export type TipoDia = "trabajo" | "festivo" | "vacaciones" | "asuntos-propios" | "baja";
+export type TipoDia =
+  | "trabajo"
+  | "festivo"
+  | "vacaciones"
+  | "asuntos-propios"
+  | "ap-recuperables"
+  | "dr"
+  | "libranza"
+  | "baja";
 
 export const NOMBRE_TIPO: Record<TipoDia, string> = {
   trabajo: "Trabajo",
   festivo: "Festivo",
   vacaciones: "Vacaciones",
   "asuntos-propios": "Asuntos propios",
+  "ap-recuperables": "AP recuperables",
+  dr: "Horas de DR",
+  libranza: "Libranza",
   baja: "Baja / permiso",
 };
+
+/** Tipos de día que se piden por horas: escribes cuántas te coges y cuentan como trabajadas. */
+export const TIPOS_POR_HORAS: TipoDia[] = ["asuntos-propios", "ap-recuperables", "dr"];
+export const esPorHoras = (t: TipoDia) => TIPOS_POR_HORAS.includes(t);
+
+/** Tipos a los que se aplica la casilla "contar como el objetivo diario". */
+export const TIPOS_DIA_COMPLETO: TipoDia[] = ["festivo", "vacaciones", "baja"];
 
 /** Lo que el usuario escribe para un día. */
 export type RegistroDia = {
@@ -20,8 +38,14 @@ export type RegistroDia = {
   salida: string; // "15:30" o "" si está vacío
   pausa: number; // minutos
   tipo: TipoDia;
-  minutosAsuntosPropios?: number; // solo en días de asuntos propios: cuánto tiempo te has cogido
+  minutosPermiso?: number; // en AP, AP recuperables y DR: cuánto tiempo te has cogido
+  minutosRecuperacion?: number; // en días de trabajo: parte del tiempo que sirve para recuperar AP recuperables
+  /** @deprecated nombre antiguo de minutosPermiso; se sigue leyendo por compatibilidad */
+  minutosAsuntosPropios?: number;
 };
+
+export const minutosPermiso = (r: RegistroDia) => r.minutosPermiso ?? r.minutosAsuntosPropios ?? 0;
+export const minutosRecuperacion = (r: RegistroDia) => r.minutosRecuperacion ?? 0;
 
 /** Una semana guardada (de lunes a viernes). */
 export type Semana = {
@@ -33,15 +57,16 @@ export type Semana = {
 
 export type EstadoDia = "sin-registrar" | "pendiente" | "cumplido" | "exceso" | "ausencia";
 
-export type ErrorDia = "incompleto" | "salida-anterior" | "pausa-invalida" | "pausa-excesiva" | "ap-sin-horas" | "ap-invalido";
+export type ErrorDia = "incompleto" | "salida-anterior" | "pausa-invalida" | "pausa-excesiva" | "permiso-sin-horas" | "permiso-invalido" | "recuperacion-invalida";
 
 export const MENSAJE_ERROR: Record<ErrorDia, string> = {
   incompleto: "Falta la hora de entrada o la de salida.",
   "salida-anterior": "La salida debe ser posterior a la entrada.",
   "pausa-invalida": "La pausa debe ser un número de minutos igual o mayor que 0.",
   "pausa-excesiva": "La pausa es más larga que el tiempo trabajado.",
-  "ap-sin-horas": "Indica cuántas horas de asuntos propios te has cogido.",
-  "ap-invalido": "Las horas de asuntos propios deben ser un número igual o mayor que 0.",
+  "permiso-sin-horas": "Indica cuántas horas te has cogido.",
+  "permiso-invalido": "Las horas deben ser un número igual o mayor que 0.",
+  "recuperacion-invalida": "Las horas de recuperación no pueden ser más que las horas trabajadas.",
 };
 
 export type ResultadoDia = {
@@ -127,15 +152,18 @@ export function calcularDia(registro: RegistroDia, jornada: Jornada, contarAusen
     error,
   });
 
-  // Asuntos propios: cuentan las horas que te coges, más lo que hayas trabajado ese día
-  if (registro.tipo === "asuntos-propios") {
-    const ap = registro.minutosAsuntosPropios ?? 0;
-    if (!Number.isFinite(ap) || ap < 0) return resultado(0, "ausencia", "ap-invalido");
+  // AP, AP recuperables y DR: cuentan las horas que te coges, más lo que hayas trabajado ese día
+  if (esPorHoras(registro.tipo)) {
+    const permiso = minutosPermiso(registro);
+    if (!Number.isFinite(permiso) || permiso < 0) return resultado(0, "ausencia", "permiso-invalido");
     const t = horasTrabajadas(registro);
-    if (t.error) return resultado(ap, "ausencia", t.error);
-    if (ap === 0 && t.vacio) return resultado(0, "ausencia", "ap-sin-horas");
-    return resultado(t.minutos + ap, "ausencia", null);
+    if (t.error) return resultado(permiso, "ausencia", t.error);
+    if (permiso === 0 && t.vacio) return resultado(0, "ausencia", "permiso-sin-horas");
+    return resultado(t.minutos + permiso, "ausencia", null);
   }
+
+  // Libranza: ese día cuenta 0 h y las horas se reparten en el resto de la semana
+  if (registro.tipo === "libranza") return resultado(0, "ausencia", null);
 
   // Regla 5 y 6: festivos, vacaciones y bajas
   if (registro.tipo !== "trabajo") {
@@ -146,9 +174,16 @@ export function calcularDia(registro: RegistroDia, jornada: Jornada, contarAusen
   if (t.vacio) return resultado(0, "sin-registrar", null);
   if (t.error) return resultado(0, "pendiente", t.error);
 
+  // Las horas de recuperación de AP no cuentan para la jornada
+  const recuperacion = minutosRecuperacion(registro);
+  if (!Number.isFinite(recuperacion) || recuperacion < 0 || recuperacion > t.minutos) {
+    return resultado(0, "pendiente", "recuperacion-invalida");
+  }
+  const minutos = t.minutos - recuperacion;
+
   // Regla 8: estado
-  const estado: EstadoDia = t.minutos < objetivo ? "pendiente" : t.minutos === objetivo ? "cumplido" : "exceso";
-  return resultado(t.minutos, estado, null);
+  const estado: EstadoDia = minutos < objetivo ? "pendiente" : minutos === objetivo ? "cumplido" : "exceso";
+  return resultado(minutos, estado, null);
 }
 
 // ---------- Cálculo de una semana ----------
@@ -232,7 +267,7 @@ export function balanceAcumulado(semanas: Semana[], hoy: Date): number {
 /** Rellena la entrada si está vacía; si no, rellena la salida. */
 export function ficharAhora(registro: RegistroDia, ahora: Date): RegistroDia {
   const hora = aHora(ahora.getHours() * 60 + ahora.getMinutes());
-  const tipo = registro.tipo === "asuntos-propios" ? registro.tipo : "trabajo";
+  const tipo = esPorHoras(registro.tipo) ? registro.tipo : "trabajo";
   if (registro.entrada === "") return { ...registro, tipo, entrada: hora };
   return { ...registro, salida: hora };
 }
@@ -245,11 +280,18 @@ export function resumenSemanal(semana: Semana): string {
   const lineas = semana.dias.map((d, i) => {
     const fecha = sumarDias(lunes, i).toLocaleDateString("es-ES");
     let detalle = "";
-    if (d.tipo === "asuntos-propios") {
+    if (esPorHoras(d.tipo)) {
       const trabajo = d.entrada && d.salida ? `${d.entrada}–${d.salida}, ` : "";
-      detalle = ` (${trabajo}asuntos propios ${formatoHoras(d.minutosAsuntosPropios ?? 0)})`;
-    } else if (d.tipo !== "trabajo") detalle = ` (${NOMBRE_TIPO[d.tipo]})`;
-    else if (d.entrada && d.salida) detalle = ` (${d.entrada}–${d.salida}${d.pausa ? `, pausa ${d.pausa} min` : ""})`;
+      const nombre = d.tipo === "asuntos-propios" ? "asuntos propios" : d.tipo === "dr" ? "DR" : "AP recuperables";
+      detalle = ` (${trabajo}${nombre} ${formatoHoras(minutosPermiso(d))})`;
+    } else if (d.tipo !== "trabajo") {
+      detalle = ` (${NOMBRE_TIPO[d.tipo]})`;
+    } else if (d.entrada && d.salida) {
+      const extras = [d.pausa ? `pausa ${d.pausa} min` : "", minutosRecuperacion(d) ? `recupera ${formatoHoras(minutosRecuperacion(d))}` : ""]
+        .filter(Boolean)
+        .join(", ");
+      detalle = ` (${d.entrada}–${d.salida}${extras ? `, ${extras}` : ""})`;
+    }
     return `${DIAS_SEMANA[i]} ${fecha}: ${formatoHoras(r.dias[i]?.minutos ?? 0)}${detalle}`;
   });
   return [

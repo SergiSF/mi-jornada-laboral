@@ -121,12 +121,12 @@ describe("Resumen para copiar", () => {
 });
 
 describe("Asuntos propios por horas", () => {
-  const ap = (minutos: number, entrada = "", salida = ""): RegistroDia => ({ entrada, salida, pausa: 0, tipo: "asuntos-propios", minutosAsuntosPropios: minutos });
+  const ap = (minutos: number, entrada = "", salida = ""): RegistroDia => ({ entrada, salida, pausa: 0, tipo: "asuntos-propios", minutosPermiso: minutos });
   it("cuenta solo las horas que te coges, no la jornada completa", () => expect(calcularDia(ap(180), 37.5, true).minutos).toBe(180));
   it("no depende de la casilla de contar ausencias", () => expect(calcularDia(ap(180), 37.5, false).minutos).toBe(180));
   it("suma la parte trabajada: 08:00–12:30 más 3 h son 7 h 30 min", () =>
     expect(calcularDia(ap(180, "08:00", "12:30"), 37.5, true).minutos).toBe(450));
-  it("avisa si no has indicado las horas", () => expect(calcularDia(ap(0), 37.5, true).error).toBe("ap-sin-horas"));
+  it("avisa si no has indicado las horas", () => expect(calcularDia(ap(0), 37.5, true).error).toBe("permiso-sin-horas"));
   it("fichar en un día de asuntos propios no cambia el tipo de día", () =>
     expect(ficharAhora(ap(120), new Date(2026, 9, 21, 10, 0)).tipo).toBe("asuntos-propios"));
   it("el resumen indica las horas de asuntos propios", () => {
@@ -134,4 +134,18 @@ describe("Asuntos propios por horas", () => {
     s.dias[0] = ap(180);
     expect(resumenSemanal(s)).toContain("asuntos propios 3 h 00 min");
   });
+});
+
+describe("DR, AP recuperables, libranza y recuperación", () => {
+  const permiso = (tipo: "dr" | "ap-recuperables", minutos: number): RegistroDia => ({ entrada: "", salida: "", pausa: 0, tipo, minutosPermiso: minutos });
+  it("las horas de DR cuentan como trabajadas", () => expect(calcularDia(permiso("dr", 120), 35, true).minutos).toBe(120));
+  it("las AP recuperables cuentan como trabajadas", () => expect(calcularDia(permiso("ap-recuperables", 90), 35, true).minutos).toBe(90));
+  it("la libranza cuenta 0 h aunque esté marcada la casilla", () =>
+    expect(calcularDia({ ...trabajo("", ""), tipo: "libranza" }, 35, true).minutos).toBe(0));
+  it("las horas de recuperación no cuentan para la jornada", () =>
+    expect(calcularDia({ ...trabajo("08:00", "16:30"), minutosRecuperacion: 60 }, 37.5, true).minutos).toBe(450));
+  it("no puedes recuperar más de lo que has trabajado", () =>
+    expect(calcularDia({ ...trabajo("08:00", "09:00"), minutosRecuperacion: 120 }, 35, true).error).toBe("recuperacion-invalida"));
+  it("los datos antiguos de asuntos propios se siguen leyendo", () =>
+    expect(calcularDia({ ...trabajo("", ""), tipo: "asuntos-propios", minutosAsuntosPropios: 60 }, 35, true).minutos).toBe(60));
 });

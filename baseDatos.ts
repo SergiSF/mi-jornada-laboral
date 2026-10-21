@@ -1,6 +1,7 @@
 // Guardado en el propio dispositivo con IndexedDB (la "base de datos" del navegador).
 // Los datos no salen nunca de tu ordenador o móvil.
 import type { Jornada, Semana } from "./calculos";
+import type { SaldoAnual } from "./saldos";
 
 export type Ajustes = {
   jornadaPorDefecto: Jornada;
@@ -38,12 +39,15 @@ function esperar<T>(peticion: IDBRequest<T>): Promise<T> {
   });
 }
 
-export async function leerTodo(): Promise<{ semanas: Semana[]; ajustes: Ajustes }> {
+export type Saldos = Record<string, SaldoAnual>; // clave: el año, por ejemplo "2026"
+
+export async function leerTodo(): Promise<{ semanas: Semana[]; ajustes: Ajustes; saldos: Saldos }> {
   const bd = await abrir();
   const tx = bd.transaction(["semanas", "ajustes"], "readonly");
   const semanas = await esperar(tx.objectStore("semanas").getAll() as IDBRequest<Semana[]>);
   const guardados = await esperar(tx.objectStore("ajustes").get("ajustes") as IDBRequest<Ajustes | undefined>);
-  return { semanas, ajustes: { ...AJUSTES_INICIALES, ...guardados } };
+  const saldos = await esperar(tx.objectStore("ajustes").get("saldos") as IDBRequest<Saldos | undefined>);
+  return { semanas, ajustes: { ...AJUSTES_INICIALES, ...guardados }, saldos: saldos ?? {} };
 }
 
 export async function guardarSemana(semana: Semana): Promise<void> {
@@ -54,6 +58,11 @@ export async function guardarSemana(semana: Semana): Promise<void> {
 export async function guardarAjustes(ajustes: Ajustes): Promise<void> {
   const bd = await abrir();
   await esperar(bd.transaction("ajustes", "readwrite").objectStore("ajustes").put(ajustes, "ajustes"));
+}
+
+export async function guardarSaldos(saldos: Saldos): Promise<void> {
+  const bd = await abrir();
+  await esperar(bd.transaction("ajustes", "readwrite").objectStore("ajustes").put(saldos, "saldos"));
 }
 
 /** Borra todas las semanas y, si se indica, las sustituye por otras (al importar una copia). */
