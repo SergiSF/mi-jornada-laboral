@@ -1,0 +1,10 @@
+# Instrucciones para Netlify: cómo construir la app y qué carpeta publicar
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# El archivo que guarda la app sin conexión se revisa siempre, para que las actualizaciones lleguen enseguida
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
