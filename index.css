@@ -1,0 +1,40 @@
+@import url("https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap");
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Colores en formato "R G B" para que Tailwind pueda aplicar transparencias */
+:root {
+  --fondo: 243 244 247;
+  --superficie: 255 255 255;
+  --texto: 27 35 51;
+  --suave: 93 102 120;
+  --borde: 221 225 233;
+  --principal: 47 79 214;
+  --cumplido: 31 140 85;
+  --pendiente: 196 120 10;
+  --ausencia: 115 95 200;
+  color-scheme: light;
+}
+
+.dark {
+  --fondo: 17 21 29;
+  --superficie: 26 32 41;
+  --texto: 231 234 241;
+  --suave: 154 163 181;
+  --borde: 44 52 65;
+  --principal: 142 163 255;
+  --cumplido: 111 211 158;
+  --pendiente: 240 179 92;
+  --ausencia: 185 171 255;
+  color-scheme: dark;
+}
+
+html, body, #root { height: 100%; }
+body {
+  @apply bg-fondo text-texto font-sans antialiased;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
