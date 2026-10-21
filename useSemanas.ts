@@ -9,10 +9,13 @@ import {
   pedirGuardadoPermanente,
   reemplazarSemanas,
   guardarSaldos,
+  guardarDato,
   type Ajustes,
   type Saldos,
 } from "./baseDatos";
 import { SALDO_VACIO, type SaldoAnual } from "./saldos";
+import type { Agenda } from "./agenda";
+import type { Extension } from "./extensiones";
 import type { Copia } from "./copia";
 
 function semanaDeEjemplo(): Semana {
@@ -35,6 +38,10 @@ export type Almacen = {
   saldo: (anio: number) => SaldoAnual;
   cambiarSaldo: (anio: number, saldo: SaldoAnual) => void;
   saldos: Saldos;
+  agenda: Agenda;
+  cambiarAgenda: (cambio: (prev: Agenda) => Agenda) => void;
+  extensiones: Extension[];
+  cambiarExtensiones: (lista: Extension[]) => void;
   obtener: (lunes: Date) => Semana;
   guardar: (semana: Semana) => void;
   cambiarAjustes: (cambios: Partial<Ajustes>) => void;
@@ -51,6 +58,8 @@ export function useSemanas(): Almacen {
   const [ajustes, setAjustes] = useState<Ajustes>(AJUSTES_INICIALES);
   const [ejemplo, setEjemplo] = useState<Semana | null>(null);
   const [saldos, setSaldos] = useState<Saldos>({});
+  const [agenda, setAgenda] = useState<Agenda>({});
+  const [extensiones, setExtensiones] = useState<Extension[]>([]);
 
   const fallo = () =>
     setErrorGuardado("No se han podido guardar los cambios en este dispositivo. Haz una copia de seguridad desde Ajustes.");
@@ -59,8 +68,10 @@ export function useSemanas(): Almacen {
   useEffect(() => {
     pedirGuardadoPermanente();
     leerTodo()
-      .then(({ semanas, ajustes: a, saldos: sal }) => {
+      .then(({ semanas, ajustes: a, saldos: sal, agenda: ag, extensiones: ext }) => {
         setSaldos(sal);
+        setAgenda(ag);
+        setExtensiones(ext);
         setMapa(Object.fromEntries(semanas.map((s) => [s.lunes, s])));
         setAjustes(a);
         if (!a.ejemploVisto && semanas.length === 0) setEjemplo(semanaDeEjemplo());
@@ -88,6 +99,19 @@ export function useSemanas(): Almacen {
       guardarSaldos(todos).catch(fallo);
       return todos;
     });
+  }, []);
+
+  const cambiarAgenda = useCallback((cambio: (prev: Agenda) => Agenda) => {
+    setAgenda((prev) => {
+      const nueva = cambio(prev);
+      guardarDato("agenda", nueva).catch(fallo);
+      return nueva;
+    });
+  }, []);
+
+  const cambiarExtensiones = useCallback((lista: Extension[]) => {
+    setExtensiones(lista);
+    guardarDato("extensiones", lista).catch(fallo);
   }, []);
 
   const obtener = useCallback(
@@ -120,6 +144,12 @@ export function useSemanas(): Almacen {
       await reemplazarSemanas(copia.semanas);
       await guardarSaldos(copia.saldos);
       setSaldos(copia.saldos);
+      await guardarDato("agenda", copia.agenda);
+      setAgenda(copia.agenda);
+      if (copia.extensiones.length > 0) {
+        await guardarDato("extensiones", copia.extensiones);
+        setExtensiones(copia.extensiones);
+      }
       setMapa(Object.fromEntries(copia.semanas.map((s) => [s.lunes, s])));
       setEjemplo(null);
       cambiarAjustes({ ...copia.ajustes, ejemploVisto: true });
@@ -131,6 +161,10 @@ export function useSemanas(): Almacen {
     await reemplazarSemanas([]);
     await guardarSaldos({});
     setSaldos({});
+    await guardarDato("agenda", {});
+    setAgenda({});
+    await guardarDato("extensiones", []);
+    setExtensiones([]);
     setMapa({});
     setEjemplo(null);
     cambiarAjustes({ ...AJUSTES_INICIALES, ejemploVisto: true });
@@ -144,6 +178,10 @@ export function useSemanas(): Almacen {
     saldo,
     cambiarSaldo,
     saldos,
+    agenda,
+    cambiarAgenda,
+    extensiones,
+    cambiarExtensiones,
     obtener,
     guardar,
     cambiarAjustes,

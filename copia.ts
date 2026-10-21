@@ -2,6 +2,8 @@
 import type { Jornada, RegistroDia, Semana, TipoDia } from "./calculos";
 import { AJUSTES_INICIALES, type Ajustes, type Saldos } from "./baseDatos";
 import { SALDO_VACIO, type SaldoAnual } from "./saldos";
+import type { Agenda } from "./agenda";
+import type { Extension } from "./extensiones";
 
 export type Copia = {
   aplicacion: "mi-jornada";
@@ -10,9 +12,18 @@ export type Copia = {
   ajustes: Ajustes;
   semanas: Semana[];
   saldos: Saldos;
+  agenda: Agenda;
+  extensiones: Extension[];
 };
 
-export function crearCopia(semanas: Semana[], ajustes: Ajustes, saldos: Saldos, ahora: Date): Copia {
+export function crearCopia(
+  semanas: Semana[],
+  ajustes: Ajustes,
+  saldos: Saldos,
+  agenda: Agenda,
+  extensiones: Extension[],
+  ahora: Date,
+): Copia {
   return {
     aplicacion: "mi-jornada",
     version: 1,
@@ -20,6 +31,8 @@ export function crearCopia(semanas: Semana[], ajustes: Ajustes, saldos: Saldos, 
     ajustes,
     semanas: [...semanas].sort((a, b) => a.lunes.localeCompare(b.lunes)),
     saldos,
+    agenda,
+    extensiones,
   };
 }
 
@@ -93,6 +106,8 @@ export function leerCopia(texto: string): { ok: true; copia: Copia } | { ok: fal
       ajustes,
       semanas: semanas as Semana[],
       saldos,
+      agenda: esObjeto(datos.agenda) ? (datos.agenda as Agenda) : {},
+      extensiones: Array.isArray(datos.extensiones) ? (datos.extensiones as Extension[]) : [],
     },
   };
 }

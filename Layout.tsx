@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { Moon, Sun, Monitor, Clock } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { Moon, Sun, Monitor, Clock, Menu } from "lucide-react";
 import { PANTALLAS, type Pantalla } from "./navegacion";
 import type { Tema } from "./tema";
 
@@ -16,6 +16,13 @@ const NOMBRE_TEMA: Record<Tema, string> = { sistema: "Tema del sistema", claro: 
 
 export default function Layout({ actual, onCambiar, tema, onTema, children }: Props) {
   const IconoTema = tema === "claro" ? Sun : tema === "oscuro" ? Moon : Monitor;
+  const [masAbierto, setMasAbierto] = useState(false);
+  const secundarias = PANTALLAS.filter((p) => !p.principal);
+  const enMas = secundarias.some((p) => p.id === actual);
+  const ir = (p: Pantalla) => {
+    onCambiar(p);
+    setMasAbierto(false);
+  };
 
   return (
     <div className="flex h-full">
@@ -59,18 +66,39 @@ export default function Layout({ actual, onCambiar, tema, onTema, children }: Pr
         <div className="mx-auto max-w-5xl px-4 py-6 md:px-8 md:py-10">{children}</div>
       </main>
 
+      {/* Menú "Más" del móvil */}
+      {masAbierto && (
+        <div className="fixed inset-0 z-10 bg-texto/30 md:hidden" onClick={() => setMasAbierto(false)}>
+          <div
+            className="absolute inset-x-3 grid gap-1 rounded-2xl border border-borde bg-superficie p-2 shadow-xl"
+            style={{ bottom: "calc(4.5rem + env(safe-area-inset-bottom, 0px))" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {secundarias.map(({ id, nombre, icono: Icono }) => (
+              <button key={id} onClick={() => ir(id)}
+                className={`flex items-center gap-3 rounded-xl px-3 py-3 font-semibold ${id === actual ? "bg-principal/10 text-principal" : "text-texto"}`}>
+                <Icono size={20} /> {nombre}
+              </button>
+            ))}
+            <button onClick={() => onTema(SIGUIENTE_TEMA[tema])} className="flex items-center gap-3 rounded-xl px-3 py-3 font-semibold text-suave">
+              <IconoTema size={20} /> {NOMBRE_TEMA[tema]}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Menú inferior: solo en móvil */}
       <nav
         aria-label="Secciones"
-        className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-5 border-t border-borde bg-superficie/95 backdrop-blur md:hidden"
+        className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-borde bg-superficie/95 backdrop-blur md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
-        {PANTALLAS.map(({ id, nombre, icono: Icono }) => {
-          const activo = id === actual;
+        {PANTALLAS.filter((p) => p.principal).map(({ id, nombre, icono: Icono }) => {
+          const activo = id === actual && !masAbierto;
           return (
             <button
               key={id}
-              onClick={() => onCambiar(id)}
+              onClick={() => ir(id)}
               aria-current={activo ? "page" : undefined}
               className={`flex flex-col items-center gap-1 py-2.5 text-[11px] font-semibold ${activo ? "text-principal" : "text-suave"}`}
             >
@@ -79,6 +107,11 @@ export default function Layout({ actual, onCambiar, tema, onTema, children }: Pr
             </button>
           );
         })}
+        <button onClick={() => setMasAbierto(!masAbierto)} aria-expanded={masAbierto}
+          className={`flex flex-col items-center gap-1 py-2.5 text-[11px] font-semibold ${masAbierto || enMas ? "text-principal" : "text-suave"}`}>
+          <Menu size={22} />
+          Más
+        </button>
       </nav>
     </div>
   );

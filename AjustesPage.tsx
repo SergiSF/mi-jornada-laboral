@@ -33,7 +33,7 @@ export default function AjustesPage({ tema, onTema, almacen }: Props) {
 
   const exportar = () => {
     const ahora = new Date();
-    const texto = JSON.stringify(crearCopia(semanas, ajustes, almacen.saldos, ahora), null, 2);
+    const texto = JSON.stringify(crearCopia(semanas, ajustes, almacen.saldos, almacen.agenda, almacen.extensiones, ahora), null, 2);
     const url = URL.createObjectURL(new Blob([texto], { type: "application/json" }));
     const enlace = document.createElement("a");
     enlace.href = url;
@@ -168,7 +168,7 @@ export default function AjustesPage({ tema, onTema, almacen }: Props) {
         {confirmarBorrado ? (
           <div className="rounded-xl border border-pendiente/40 bg-pendiente/10 p-4 text-sm">
             <p className="font-semibold text-pendiente">
-              Vas a borrar {plural(semanas.length)}, los saldos anuales y los ajustes. No se puede deshacer.
+              Vas a borrar {plural(semanas.length)}, los saldos anuales, la agenda, las extensiones y los ajustes. No se puede deshacer.
             </p>
             <div className="mt-3 flex gap-2">
               <button onClick={borrarTodo} className="rounded-lg bg-pendiente px-3 py-2 font-bold text-superficie">Borrar todo</button>

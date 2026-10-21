@@ -2,6 +2,8 @@
 // Los datos no salen nunca de tu ordenador o móvil.
 import type { Jornada, Semana } from "./calculos";
 import type { SaldoAnual } from "./saldos";
+import type { Agenda } from "./agenda";
+import type { Extension } from "./extensiones";
 
 export type Ajustes = {
   jornadaPorDefecto: Jornada;
@@ -41,13 +43,17 @@ function esperar<T>(peticion: IDBRequest<T>): Promise<T> {
 
 export type Saldos = Record<string, SaldoAnual>; // clave: el año, por ejemplo "2026"
 
-export async function leerTodo(): Promise<{ semanas: Semana[]; ajustes: Ajustes; saldos: Saldos }> {
+export type Todo = { semanas: Semana[]; ajustes: Ajustes; saldos: Saldos; agenda: Agenda; extensiones: Extension[] };
+
+export async function leerTodo(): Promise<Todo> {
   const bd = await abrir();
   const tx = bd.transaction(["semanas", "ajustes"], "readonly");
   const semanas = await esperar(tx.objectStore("semanas").getAll() as IDBRequest<Semana[]>);
   const guardados = await esperar(tx.objectStore("ajustes").get("ajustes") as IDBRequest<Ajustes | undefined>);
   const saldos = await esperar(tx.objectStore("ajustes").get("saldos") as IDBRequest<Saldos | undefined>);
-  return { semanas, ajustes: { ...AJUSTES_INICIALES, ...guardados }, saldos: saldos ?? {} };
+  const agenda = await esperar(tx.objectStore("ajustes").get("agenda") as IDBRequest<Agenda | undefined>);
+  const extensiones = await esperar(tx.objectStore("ajustes").get("extensiones") as IDBRequest<Extension[] | undefined>);
+  return { semanas, ajustes: { ...AJUSTES_INICIALES, ...guardados }, saldos: saldos ?? {}, agenda: agenda ?? {}, extensiones: extensiones ?? [] };
 }
 
 export async function guardarSemana(semana: Semana): Promise<void> {
@@ -58,6 +64,12 @@ export async function guardarSemana(semana: Semana): Promise<void> {
 export async function guardarAjustes(ajustes: Ajustes): Promise<void> {
   const bd = await abrir();
   await esperar(bd.transaction("ajustes", "readwrite").objectStore("ajustes").put(ajustes, "ajustes"));
+}
+
+/** Guarda la agenda o el listado de extensiones. */
+export async function guardarDato(clave: "agenda" | "extensiones", valor: Agenda | Extension[]): Promise<void> {
+  const bd = await abrir();
+  await esperar(bd.transaction("ajustes", "readwrite").objectStore("ajustes").put(valor, clave));
 }
 
 export async function guardarSaldos(saldos: Saldos): Promise<void> {

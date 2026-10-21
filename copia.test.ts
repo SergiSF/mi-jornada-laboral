@@ -8,7 +8,7 @@ describe("Copias de seguridad", () => {
   semana.dias[0] = { entrada: "08:00", salida: "15:00", pausa: 0, tipo: "trabajo" };
 
   it("una copia exportada se puede volver a importar igual", () => {
-    const texto = JSON.stringify(crearCopia([semana], AJUSTES_INICIALES, { "2026": { vacacionesDias: 22, apMinutos: 900, apRecuperablesMinutos: 0, drMinutos: 300 } }, new Date(2026, 9, 21)));
+    const texto = JSON.stringify(crearCopia([semana], AJUSTES_INICIALES, { "2026": { vacacionesDias: 22, apMinutos: 900, apRecuperablesMinutos: 0, drMinutos: 300 } }, {}, [], new Date(2026, 9, 21)));
     const r = leerCopia(texto);
     expect(r.ok).toBe(true);
     if (r.ok) {
