@@ -20,6 +20,7 @@ export type RegistroDia = {
   salida: string; // "15:30" o "" si está vacío
   pausa: number; // minutos
   tipo: TipoDia;
+  minutosAsuntosPropios?: number; // solo en días de asuntos propios: cuánto tiempo te has cogido
 };
 
 /** Una semana guardada (de lunes a viernes). */
@@ -32,13 +33,15 @@ export type Semana = {
 
 export type EstadoDia = "sin-registrar" | "pendiente" | "cumplido" | "exceso" | "ausencia";
 
-export type ErrorDia = "incompleto" | "salida-anterior" | "pausa-invalida" | "pausa-excesiva";
+export type ErrorDia = "incompleto" | "salida-anterior" | "pausa-invalida" | "pausa-excesiva" | "ap-sin-horas" | "ap-invalido";
 
 export const MENSAJE_ERROR: Record<ErrorDia, string> = {
   incompleto: "Falta la hora de entrada o la de salida.",
   "salida-anterior": "La salida debe ser posterior a la entrada.",
   "pausa-invalida": "La pausa debe ser un número de minutos igual o mayor que 0.",
   "pausa-excesiva": "La pausa es más larga que el tiempo trabajado.",
+  "ap-sin-horas": "Indica cuántas horas de asuntos propios te has cogido.",
+  "ap-invalido": "Las horas de asuntos propios deben ser un número igual o mayor que 0.",
 };
 
 export type ResultadoDia = {
@@ -99,6 +102,21 @@ export function objetivoDiario(jornada: Jornada): number {
 
 // ---------- Cálculo de un día ----------
 
+/** Horas trabajadas según entrada, salida y pausa. */
+function horasTrabajadas(registro: RegistroDia): { minutos: number; vacio: boolean; error: ErrorDia | null } {
+  const entrada = aMinutos(registro.entrada);
+  const salida = aMinutos(registro.salida);
+  if (entrada === null && salida === null) return { minutos: 0, vacio: true, error: null };
+  if (entrada === null || salida === null) return { minutos: 0, vacio: false, error: "incompleto" };
+  if (salida <= entrada) return { minutos: 0, vacio: false, error: "salida-anterior" };
+  const pausa = registro.pausa;
+  if (!Number.isFinite(pausa) || pausa < 0) return { minutos: 0, vacio: false, error: "pausa-invalida" };
+  // Regla 4: horas = salida − entrada − pausa
+  const minutos = salida - entrada - pausa;
+  if (minutos < 0) return { minutos: 0, vacio: false, error: "pausa-excesiva" };
+  return { minutos, vacio: false, error: null };
+}
+
 export function calcularDia(registro: RegistroDia, jornada: Jornada, contarAusencias: boolean): ResultadoDia {
   const objetivo = objetivoDiario(jornada);
   const resultado = (minutos: number, estado: EstadoDia, error: ErrorDia | null): ResultadoDia => ({
@@ -109,28 +127,28 @@ export function calcularDia(registro: RegistroDia, jornada: Jornada, contarAusen
     error,
   });
 
-  // Regla 5 y 6: días que no son de trabajo
+  // Asuntos propios: cuentan las horas que te coges, más lo que hayas trabajado ese día
+  if (registro.tipo === "asuntos-propios") {
+    const ap = registro.minutosAsuntosPropios ?? 0;
+    if (!Number.isFinite(ap) || ap < 0) return resultado(0, "ausencia", "ap-invalido");
+    const t = horasTrabajadas(registro);
+    if (t.error) return resultado(ap, "ausencia", t.error);
+    if (ap === 0 && t.vacio) return resultado(0, "ausencia", "ap-sin-horas");
+    return resultado(t.minutos + ap, "ausencia", null);
+  }
+
+  // Regla 5 y 6: festivos, vacaciones y bajas
   if (registro.tipo !== "trabajo") {
     return resultado(contarAusencias ? objetivo : 0, "ausencia", null);
   }
 
-  const entrada = aMinutos(registro.entrada);
-  const salida = aMinutos(registro.salida);
-
-  if (entrada === null && salida === null) return resultado(0, "sin-registrar", null);
-  if (entrada === null || salida === null) return resultado(0, "pendiente", "incompleto");
-  if (salida <= entrada) return resultado(0, "pendiente", "salida-anterior");
-
-  const pausa = registro.pausa;
-  if (!Number.isFinite(pausa) || pausa < 0) return resultado(0, "pendiente", "pausa-invalida");
-
-  // Regla 4: horas = salida − entrada − pausa
-  const minutos = salida - entrada - pausa;
-  if (minutos < 0) return resultado(0, "pendiente", "pausa-excesiva");
+  const t = horasTrabajadas(registro);
+  if (t.vacio) return resultado(0, "sin-registrar", null);
+  if (t.error) return resultado(0, "pendiente", t.error);
 
   // Regla 8: estado
-  const estado: EstadoDia = minutos < objetivo ? "pendiente" : minutos === objetivo ? "cumplido" : "exceso";
-  return resultado(minutos, estado, null);
+  const estado: EstadoDia = t.minutos < objetivo ? "pendiente" : t.minutos === objetivo ? "cumplido" : "exceso";
+  return resultado(t.minutos, estado, null);
 }
 
 // ---------- Cálculo de una semana ----------
@@ -214,7 +232,8 @@ export function balanceAcumulado(semanas: Semana[], hoy: Date): number {
 /** Rellena la entrada si está vacía; si no, rellena la salida. */
 export function ficharAhora(registro: RegistroDia, ahora: Date): RegistroDia {
   const hora = aHora(ahora.getHours() * 60 + ahora.getMinutes());
-  if (registro.entrada === "") return { ...registro, tipo: "trabajo", entrada: hora };
+  const tipo = registro.tipo === "asuntos-propios" ? registro.tipo : "trabajo";
+  if (registro.entrada === "") return { ...registro, tipo, entrada: hora };
   return { ...registro, salida: hora };
 }
 
@@ -226,7 +245,10 @@ export function resumenSemanal(semana: Semana): string {
   const lineas = semana.dias.map((d, i) => {
     const fecha = sumarDias(lunes, i).toLocaleDateString("es-ES");
     let detalle = "";
-    if (d.tipo !== "trabajo") detalle = ` (${NOMBRE_TIPO[d.tipo]})`;
+    if (d.tipo === "asuntos-propios") {
+      const trabajo = d.entrada && d.salida ? `${d.entrada}–${d.salida}, ` : "";
+      detalle = ` (${trabajo}asuntos propios ${formatoHoras(d.minutosAsuntosPropios ?? 0)})`;
+    } else if (d.tipo !== "trabajo") detalle = ` (${NOMBRE_TIPO[d.tipo]})`;
     else if (d.entrada && d.salida) detalle = ` (${d.entrada}–${d.salida}${d.pausa ? `, pausa ${d.pausa} min` : ""})`;
     return `${DIAS_SEMANA[i]} ${fecha}: ${formatoHoras(r.dias[i]?.minutos ?? 0)}${detalle}`;
   });

@@ -29,7 +29,12 @@ function leerDia(v: unknown): RegistroDia | null {
   if (!esObjeto(v)) return null;
   if (!esHora(v.entrada) || !esHora(v.salida)) return null;
   if (typeof v.pausa !== "number" || !TIPOS.includes(v.tipo as TipoDia)) return null;
-  return { entrada: v.entrada as string, salida: v.salida as string, pausa: v.pausa, tipo: v.tipo as TipoDia };
+  const dia: RegistroDia = { entrada: v.entrada as string, salida: v.salida as string, pausa: v.pausa, tipo: v.tipo as TipoDia };
+  if (v.minutosAsuntosPropios !== undefined) {
+    if (typeof v.minutosAsuntosPropios !== "number") return null;
+    dia.minutosAsuntosPropios = v.minutosAsuntosPropios;
+  }
+  return dia;
 }
 
 function leerSemana(v: unknown): Semana | null {

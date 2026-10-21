@@ -15,7 +15,8 @@ const campo =
   "w-full min-w-0 rounded-lg border border-borde bg-fondo px-2.5 py-2 font-num text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-principal disabled:opacity-40";
 
 export default function TarjetaDia({ indice, fecha, registro, resultado, esHoy, cuentaAusencia, onCambiar }: Props) {
-  const esTrabajo = registro.tipo === "trabajo";
+  const esAP = registro.tipo === "asuntos-propios";
+  const esTrabajo = registro.tipo === "trabajo" || esAP; // en asuntos propios también puedes poner la parte trabajada
   const estado = ESTADO[resultado.estado];
   const textoChip = resultado.estado === "ausencia" ? NOMBRE_TIPO[registro.tipo] : estado.texto;
   const id = `dia-${indice}`;
@@ -62,14 +63,28 @@ export default function TarjetaDia({ indice, fecha, registro, resultado, esHoy, 
             ))}
           </select>
         </label>
+        {esAP && (
+          <label className="col-span-2 grid gap-1 text-[11px] font-semibold uppercase tracking-wider text-ausencia sm:col-span-4" htmlFor={`${id}-ap`}>
+            Horas de asuntos propios
+            <div className="flex items-center gap-2">
+              <input id={`${id}-ap`} type="number" min={0} max={24} step={0.25} inputMode="decimal" placeholder="Ej.: 3,5"
+                className={`${campo} max-w-[9rem] border-ausencia/50`}
+                value={registro.minutosAsuntosPropios ? registro.minutosAsuntosPropios / 60 : ""}
+                onChange={(e) => onCambiar({ ...registro, minutosAsuntosPropios: e.target.value === "" ? 0 : Math.round(Number(e.target.value) * 60) })} />
+              <span className="normal-case tracking-normal text-suave">
+                h · {registro.entrada || registro.salida ? "se suman a las horas trabajadas" : "deja entrada y salida vacías si no has trabajado"}
+              </span>
+            </div>
+          </label>
+        )}
       </div>
 
       <div className="flex items-baseline justify-between gap-2 md:block md:text-right">
         <p className="font-num text-xl font-bold tabular-nums">{formatoHoras(resultado.minutos)}</p>
         <p className={`font-num text-sm tabular-nums ${
-          resultado.estado === "ausencia" && !cuentaAusencia ? "text-suave" : resultado.diferencia >= 0 ? "text-cumplido" : "text-pendiente"
+          resultado.estado === "ausencia" && !cuentaAusencia && !esAP ? "text-suave" : resultado.diferencia >= 0 ? "text-cumplido" : "text-pendiente"
         }`}>
-          {resultado.estado === "ausencia" && !cuentaAusencia ? "No computa" : formatoHoras(resultado.diferencia, true)}
+          {resultado.estado === "ausencia" && !cuentaAusencia && !esAP ? "No computa" : formatoHoras(resultado.diferencia, true)}
         </p>
       </div>
 

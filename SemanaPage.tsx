@@ -193,7 +193,7 @@ export default function SemanaPage({ almacen, lunes, onLunes: setLunes }: Props)
         <label className="flex cursor-pointer items-center gap-3 text-sm">
           <input type="checkbox" className="h-5 w-5 accent-[rgb(var(--principal))]" checked={semana.contarAusencias}
             onChange={(e) => almacen.guardar({ ...semana, contarAusencias: e.target.checked })} />
-          Contar festivos, vacaciones y asuntos propios como el objetivo diario
+          Contar festivos, vacaciones y bajas como el objetivo diario
         </label>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-semibold text-cumplido" aria-live="polite">{aviso}</span>

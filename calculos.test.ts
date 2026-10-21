@@ -39,7 +39,7 @@ describe("Regla 3 y 4: horas del día", () => {
   it("rechaza horas imposibles", () => expect(aMinutos("25:00")).toBeNull());
 });
 
-describe("Regla 5 y 6: festivos, vacaciones y asuntos propios", () => {
+describe("Regla 5 y 6: festivos, vacaciones y bajas", () => {
   const festivo: RegistroDia = { entrada: "", salida: "", pausa: 0, tipo: "festivo" };
   it("con la opción activada cuentan como el objetivo diario", () => expect(calcularDia(festivo, 37.5, true).minutos).toBe(450));
   it("con la opción desactivada cuentan 0", () => expect(calcularDia(festivo, 37.5, false).minutos).toBe(0));
@@ -117,5 +117,21 @@ describe("Resumen para copiar", () => {
     const texto = resumenSemanal(s);
     expect(texto).toContain("Total: 7 h 00 min / 35 h 00 min");
     expect(texto).toContain("Balance: −28 h 00 min");
+  });
+});
+
+describe("Asuntos propios por horas", () => {
+  const ap = (minutos: number, entrada = "", salida = ""): RegistroDia => ({ entrada, salida, pausa: 0, tipo: "asuntos-propios", minutosAsuntosPropios: minutos });
+  it("cuenta solo las horas que te coges, no la jornada completa", () => expect(calcularDia(ap(180), 37.5, true).minutos).toBe(180));
+  it("no depende de la casilla de contar ausencias", () => expect(calcularDia(ap(180), 37.5, false).minutos).toBe(180));
+  it("suma la parte trabajada: 08:00–12:30 más 3 h son 7 h 30 min", () =>
+    expect(calcularDia(ap(180, "08:00", "12:30"), 37.5, true).minutos).toBe(450));
+  it("avisa si no has indicado las horas", () => expect(calcularDia(ap(0), 37.5, true).error).toBe("ap-sin-horas"));
+  it("fichar en un día de asuntos propios no cambia el tipo de día", () =>
+    expect(ficharAhora(ap(120), new Date(2026, 9, 21, 10, 0)).tipo).toBe("asuntos-propios"));
+  it("el resumen indica las horas de asuntos propios", () => {
+    const s = semanaNueva(new Date(2026, 9, 19), 35, true);
+    s.dias[0] = ap(180);
+    expect(resumenSemanal(s)).toContain("asuntos propios 3 h 00 min");
   });
 });

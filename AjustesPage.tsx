@@ -114,7 +114,7 @@ export default function AjustesPage({ tema, onTema, almacen }: Props) {
         <label className="flex cursor-pointer items-center gap-3 text-sm">
           <input type="checkbox" className="h-5 w-5 accent-[rgb(var(--principal))]" checked={ajustes.contarPorDefecto}
             onChange={(e) => cambiarAjustes({ contarPorDefecto: e.target.checked })} />
-          Contar festivos, vacaciones y asuntos propios como el objetivo diario en semanas nuevas
+          Contar festivos, vacaciones y bajas como el objetivo diario en semanas nuevas
         </label>
       </Bloque>
 
