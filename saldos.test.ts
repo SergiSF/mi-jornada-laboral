@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { consumoAnual, pendienteDeRecuperar, tramosDelDia, SALDO_VACIO, type SaldoAnual } from "./saldos";
+import { consumoAnual, pendienteDeRecuperar, recuperacionesHechas, tramosDelDia, SALDO_VACIO, type SaldoAnual } from "./saldos";
 import type { RegistroDia, Semana } from "./calculos";
 
 const dia = (r: Partial<RegistroDia>): RegistroDia => ({ entrada: "", salida: "", pausa: 0, tipo: "trabajo", ...r });
@@ -68,4 +68,11 @@ describe("Tramos de recuperación de AP recuperables", () => {
     expect(pendienteDeRecuperar(semanas, "2026-10-28").pendiente).toBe(0));
   it("un tramo mal escrito no cuenta", () =>
     expect(tramosDelDia([semana("2026-10-19", [dia({ tipo: "ap-recuperables", minutosPermiso: 60, recuperaciones: [{ id: "x", fecha: "2026-10-22", desde: "17:00", hasta: "16:00" }] }), libre(), libre(), libre(), libre()])], "2026-10-22")).toEqual([]));
+  it("lista las horas recuperadas con su día y franja, sin las programadas para más adelante", () =>
+    expect(recuperacionesHechas(semanas, "2026-10-23")).toEqual([
+      { fecha: "2026-10-22", desde: "15:30", hasta: "16:30", minutos: 60, origen: "2026-10-20" },
+    ]));
+  it("incluye la recuperación escrita a mano", () =>
+    expect(recuperacionesHechas([semana("2026-10-19", [dia({ entrada: "08:00", salida: "16:00", minutosRecuperacion: 45 }), libre(), libre(), libre(), libre()])], "2026-10-23"))
+      .toEqual([{ fecha: "2026-10-19", minutos: 45 }]));
 });

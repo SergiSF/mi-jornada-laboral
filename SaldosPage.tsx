@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Palmtree, UserRound, RotateCcw, Hourglass, CalendarOff } from "lucide-react";
 import { desdeISO, fechaISO, formatoHoras } from "./calculos";
 import CampoHorasMinutos from "./CampoHorasMinutos";
-import { consumoAnual, pendienteDeRecuperar, todosLosTramos, type SaldoAnual, type UsoDia } from "./saldos";
+import { consumoAnual, pendienteDeRecuperar, recuperacionesHechas, todosLosTramos, type SaldoAnual, type UsoDia } from "./saldos";
 import type { Almacen } from "./useSemanas";
 
 type Props = { almacen: Almacen; anio: number; onAnio: (anio: number) => void };
@@ -19,10 +19,11 @@ type TarjetaProps = {
   idCampo: string;
   nota?: string;
   usos: UsoDia[];
+  etiquetaUsos?: string;
   children?: ReactNode;
 };
 
-function TarjetaSaldo({ titulo, icono: Icono, unidad, total, gastado, onTotal, idCampo, nota, usos, children }: TarjetaProps) {
+function TarjetaSaldo({ titulo, icono: Icono, unidad, total, gastado, onTotal, idCampo, nota, usos, etiquetaUsos = "Ver días", children }: TarjetaProps) {
   const quedan = total - gastado;
   const fmt = (v: number) => (unidad === "dias" ? `${v} día${Math.abs(v) === 1 ? "" : "s"}` : formatoHoras(v));
   const porcentaje = total > 0 ? Math.min(100, Math.round((gastado / total) * 100)) : 0;
@@ -74,7 +75,7 @@ function TarjetaSaldo({ titulo, icono: Icono, unidad, total, gastado, onTotal, i
 
       {usos.length > 0 && (
         <details className="group text-sm">
-          <summary className="cursor-pointer select-none font-semibold text-ausencia">Ver días ({usos.length})</summary>
+          <summary className="cursor-pointer select-none font-semibold text-ausencia">{etiquetaUsos} ({usos.length})</summary>
           <ul className="mt-2 grid gap-1">
             {usos.map((u, i) => (
               <li key={i} className="flex justify-between gap-3 border-b border-borde/60 py-1 last:border-0">
@@ -95,6 +96,8 @@ export default function SaldosPage({ almacen, anio, onAnio }: Props) {
   const hoyISO = fechaISO(new Date());
   const rec = pendienteDeRecuperar(almacen.semanas, hoyISO);
   const proximas = todosLosTramos(almacen.semanas).filter((t) => t.fecha > hoyISO && t.minutos > 0);
+  const hechas = recuperacionesHechas(almacen.semanas, hoyISO);
+  const diaLargo = (iso: string) => desdeISO(iso).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
   const cambiar = (cambios: Partial<SaldoAnual>) => almacen.cambiarSaldo(anio, { ...saldo, ...cambios });
   const notaEnero = `Se pueden gastar hasta el 31 de enero de ${anio + 1}. En enero se gasta primero lo que quede del año anterior.`;
 
@@ -126,7 +129,7 @@ export default function SaldosPage({ almacen, anio, onAnio }: Props) {
 
         <TarjetaSaldo titulo="AP recuperables" icono={RotateCcw} unidad="horas" idCampo="saldo-ap-rec"
           total={saldo.apRecuperablesMinutos} gastado={c.apRecuperablesMinutos} onTotal={(v) => cambiar({ apRecuperablesMinutos: v })}
-          nota={notaEnero} usos={c.detalle.apRec}>
+          nota={notaEnero} usos={c.detalle.apRec} etiquetaUsos="Ver días cogidos">
           <div className={`rounded-2xl p-4 ${rec.pendiente > 0 ? "bg-pendiente/10" : "bg-cumplido/10"}`}>
             <p className={`text-[11px] font-bold uppercase tracking-wider ${rec.pendiente > 0 ? "text-pendiente" : "text-cumplido"}`}>
               {rec.pendiente > 0 ? "Pendiente de recuperar" : rec.pendiente < 0 ? "Recuperado por adelantado" : "Nada pendiente de recuperar"}
@@ -141,6 +144,30 @@ export default function SaldosPage({ almacen, anio, onAnio }: Props) {
               <p className="mt-1 text-xs font-semibold text-pendiente">
                 {formatoHoras(rec.sinProgramar)} sin día de recuperación. Prográmalas en el día en que cogiste las AP recuperables.
               </p>
+            )}
+            {hechas.length > 0 && (
+              <details className="mt-3 border-t border-borde/60 pt-2 text-sm" open>
+                <summary className="cursor-pointer select-none font-semibold text-cumplido">
+                  Ver horas recuperadas ({hechas.length})
+                </summary>
+                <ul className="mt-2 grid gap-1">
+                  {hechas.map((h, n) => (
+                    <li key={n} className="flex flex-wrap justify-between gap-x-3 border-b border-borde/50 py-1 last:border-0">
+                      <span>
+                        <span className="capitalize">{diaLargo(h.fecha)}</span>
+                        <span className="ml-2 font-num tabular-nums text-suave">
+                          {h.desde && h.hasta ? `${h.desde}–${h.hasta}` : "sin franja"}
+                        </span>
+                      </span>
+                      <span className="font-num font-semibold tabular-nums text-cumplido">{formatoHoras(h.minutos)}</span>
+                    </li>
+                  ))}
+                  <li className="flex justify-between gap-3 pt-1 text-xs font-bold uppercase tracking-wider text-suave">
+                    <span>Total recuperado</span>
+                    <span className="font-num tabular-nums">{formatoHoras(rec.recuperado)}</span>
+                  </li>
+                </ul>
+              </details>
             )}
             {proximas.length > 0 && (
               <ul className="mt-3 grid gap-1 border-t border-borde/60 pt-2 text-sm">

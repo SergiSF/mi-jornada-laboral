@@ -141,3 +141,26 @@ export function pendienteDeRecuperar(
   const pendiente = cogido - recuperado;
   return { cogido, recuperado, programado, pendiente, sinProgramar: Math.max(0, pendiente - programado) };
 }
+
+/** Una recuperación ya hecha: el día, la franja (si se programó con horario) y el tiempo. */
+export type RecuperacionHecha = { fecha: string; desde?: string; hasta?: string; minutos: number; origen?: string };
+
+/**
+ * Horas de AP recuperables ya recuperadas (hasta hoy incluido), ordenadas por fecha:
+ * los tramos programados y la recuperación escrita a mano en la versión anterior.
+ */
+export function recuperacionesHechas(semanas: Semana[], hoyISO: string): RecuperacionHecha[] {
+  const lista: RecuperacionHecha[] = todosLosTramos(semanas)
+    .filter((t) => t.fecha <= hoyISO && t.minutos > 0)
+    .map((t) => ({ fecha: t.fecha, desde: t.desde, hasta: t.hasta, minutos: t.minutos, origen: t.origen }));
+  for (const s of semanas) {
+    const lunes = desdeISO(s.lunes);
+    s.dias.forEach((d, i) => {
+      if (d.tipo !== "trabajo" || minutosRecuperacion(d) <= 0) return;
+      const f = sumarDias(lunes, i);
+      const fecha = `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, "0")}-${String(f.getDate()).padStart(2, "0")}`;
+      lista.push({ fecha, minutos: minutosRecuperacion(d) });
+    });
+  }
+  return lista.sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.desde ?? "").localeCompare(b.desde ?? ""));
+}
