@@ -18,7 +18,6 @@ import type { Almacen } from "./useSemanas";
 import AnilloProgreso from "./AnilloProgreso";
 import GraficoSemana from "./GraficoSemana";
 import TarjetaDia from "./TarjetaDia";
-import { tramosDelDia } from "./saldos";
 
 type Props = { almacen: Almacen; lunes: Date; onLunes: (lunes: Date) => void };
 
@@ -196,7 +195,6 @@ export default function SemanaPage({ almacen, lunes, onLunes: setLunes }: Props)
           return (
             <TarjetaDia key={`${semana.lunes}-${i}`} indice={i} fecha={sumarDias(desdeISO(semana.lunes), i)} registro={d}
               resultado={resultado} esHoy={hoyEnSemana === i} cuentaAusencia={semana.contarAusencias}
-              recuperacionesDelDia={tramosDelDia(almacen.semanas, fechaISO(sumarDias(desdeISO(semana.lunes), i)))}
               onCambiar={(nuevo) => cambiarDia(i, nuevo)} />
           );
         })}

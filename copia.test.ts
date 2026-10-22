@@ -24,15 +24,15 @@ describe("Copias de seguridad", () => {
   });
   it("el nombre del archivo lleva la fecha", () =>
     expect(nombreArchivoCopia(new Date(2026, 9, 21))).toBe("mi-jornada-copia-2026-10-21.json"));
-  it("conserva los tramos de recuperación y el origen de las tareas", () => {
+  it("conserva las franjas de recuperación y el origen de las tareas", () => {
     const conTramo = semanaNueva(new Date(2026, 9, 19), 35, true);
-    conTramo.dias[1] = { entrada: "", salida: "", pausa: 0, tipo: "ap-recuperables", minutosPermiso: 135,
-      recuperaciones: [{ id: "t1", fecha: "2026-10-22", desde: "15:30", hasta: "16:45" }] };
+    conTramo.dias[3] = { entrada: "08:00", salida: "16:45", pausa: 0, tipo: "trabajo",
+      franjasRecuperacion: [{ id: "t1", desde: "15:30", hasta: "16:45" }] };
     const agenda = { "2026-10-22": [{ id: "n", texto: "Archivar", hora: "", hecha: false, creada: 1, origen: "2026-10-20" }] };
     const r = leerCopia(JSON.stringify(crearCopia([conTramo], AJUSTES_INICIALES, {}, agenda, [], new Date(2026, 9, 22))));
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(r.copia.semanas[0]?.dias[1]?.recuperaciones).toEqual(conTramo.dias[1]?.recuperaciones);
+      expect(r.copia.semanas[0]?.dias[3]?.franjasRecuperacion).toEqual(conTramo.dias[3]?.franjasRecuperacion);
       expect(r.copia.agenda["2026-10-22"]?.[0]?.origen).toBe("2026-10-20");
     }
   });

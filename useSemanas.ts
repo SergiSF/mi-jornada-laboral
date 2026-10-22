@@ -13,7 +13,7 @@ import {
   type Ajustes,
   type Saldos,
 } from "./baseDatos";
-import { SALDO_VACIO, type SaldoAnual } from "./saldos";
+import { SALDO_VACIO, migrarTramosProgramados, type SaldoAnual } from "./saldos";
 import { arrastrarPendientes, type Agenda } from "./agenda";
 import type { Extension } from "./extensiones";
 import type { Copia } from "./copia";
@@ -70,7 +70,10 @@ export function useSemanas(): Almacen {
   useEffect(() => {
     pedirGuardadoPermanente();
     leerTodo()
-      .then(({ semanas, ajustes: a, saldos: sal, agenda: ag, extensiones: ext }) => {
+      .then(({ semanas: guardadas, ajustes: a, saldos: sal, agenda: ag, extensiones: ext }) => {
+        // Recuperaciones programadas con la versión anterior: pasan a su día como franjas
+        const { semanas, cambiadas } = migrarTramosProgramados(guardadas, (f) => semanaNueva(f, a.jornadaPorDefecto, a.contarPorDefecto));
+        cambiadas.forEach((s) => guardarSemana(s).catch(fallo));
         setSaldos(sal);
         // Las tareas sin terminar de días anteriores pasan solas al siguiente día laborable
         const { agenda: alDia, movidas } = arrastrarPendientes(ag, fechaISO(new Date()));
@@ -172,7 +175,8 @@ export function useSemanas(): Almacen {
 
   const importar = useCallback(
     async (copia: Copia) => {
-      await reemplazarSemanas(copia.semanas);
+      const semanas = migrarTramosProgramados(copia.semanas, (f) => semanaNueva(f, copia.ajustes.jornadaPorDefecto, copia.ajustes.contarPorDefecto)).semanas;
+      await reemplazarSemanas(semanas);
       await guardarSaldos(copia.saldos);
       setSaldos(copia.saldos);
       await guardarDato("agenda", copia.agenda);
@@ -181,7 +185,7 @@ export function useSemanas(): Almacen {
         await guardarDato("extensiones", copia.extensiones);
         setExtensiones(copia.extensiones);
       }
-      setMapa(Object.fromEntries(copia.semanas.map((s) => [s.lunes, s])));
+      setMapa(Object.fromEntries(semanas.map((s) => [s.lunes, s])));
       setEjemplo(null);
       cambiarAjustes({ ...copia.ajustes, ejemploVisto: true });
     },

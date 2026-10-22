@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Palmtree, UserRound, RotateCcw, Hourglass, CalendarOff } from "lucide-react";
-import { desdeISO, fechaISO, formatoHoras } from "./calculos";
+import { desdeISO, formatoHoras } from "./calculos";
 import CampoHorasMinutos from "./CampoHorasMinutos";
-import { consumoAnual, pendienteDeRecuperar, recuperacionesHechas, todosLosTramos, type SaldoAnual, type UsoDia } from "./saldos";
+import { consumoAnual, pendienteDeRecuperar, recuperacionesHechas, type SaldoAnual, type UsoDia } from "./saldos";
 import type { Almacen } from "./useSemanas";
 
 type Props = { almacen: Almacen; anio: number; onAnio: (anio: number) => void };
@@ -93,10 +93,8 @@ function TarjetaSaldo({ titulo, icono: Icono, unidad, total, gastado, onTotal, i
 export default function SaldosPage({ almacen, anio, onAnio }: Props) {
   const saldo = almacen.saldo(anio);
   const c = consumoAnual(almacen.semanas, anio, almacen.saldo);
-  const hoyISO = fechaISO(new Date());
-  const rec = pendienteDeRecuperar(almacen.semanas, hoyISO);
-  const proximas = todosLosTramos(almacen.semanas).filter((t) => t.fecha > hoyISO && t.minutos > 0);
-  const hechas = recuperacionesHechas(almacen.semanas, hoyISO);
+  const rec = pendienteDeRecuperar(almacen.semanas);
+  const hechas = recuperacionesHechas(almacen.semanas);
   const diaLargo = (iso: string) => desdeISO(iso).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
   const cambiar = (cambios: Partial<SaldoAnual>) => almacen.cambiarSaldo(anio, { ...saldo, ...cambios });
   const notaEnero = `Se pueden gastar hasta el 31 de enero de ${anio + 1}. En enero se gasta primero lo que quede del año anterior.`;
@@ -138,11 +136,11 @@ export default function SaldosPage({ almacen, anio, onAnio }: Props) {
               {formatoHoras(Math.abs(rec.pendiente))}
             </p>
             <p className="mt-1 font-num text-xs tabular-nums text-suave">
-              Cogidas {formatoHoras(rec.cogido)} · Recuperadas {formatoHoras(rec.recuperado)} · Programadas {formatoHoras(rec.programado)}
+              Cogidas {formatoHoras(rec.cogido)} · Recuperadas {formatoHoras(rec.recuperado)}
             </p>
-            {rec.sinProgramar > 0 && (
-              <p className="mt-1 text-xs font-semibold text-pendiente">
-                {formatoHoras(rec.sinProgramar)} sin día de recuperación. Prográmalas en el día en que cogiste las AP recuperables.
+            {rec.pendiente > 0 && (
+              <p className="mt-1 text-xs text-suave">
+                Para recuperar, en el día de trabajo pulsa «Añadir recuperación de AP recuperables» y pon la franja.
               </p>
             )}
             {hechas.length > 0 && (
@@ -168,19 +166,6 @@ export default function SaldosPage({ almacen, anio, onAnio }: Props) {
                   </li>
                 </ul>
               </details>
-            )}
-            {proximas.length > 0 && (
-              <ul className="mt-3 grid gap-1 border-t border-borde/60 pt-2 text-sm">
-                <li className="text-[11px] font-bold uppercase tracking-wider text-suave">Próximas recuperaciones</li>
-                {proximas.map((t) => (
-                  <li key={t.id} className="flex justify-between gap-3">
-                    <span className="capitalize">
-                      {desdeISO(t.fecha).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" })} · {t.desde}–{t.hasta}
-                    </span>
-                    <span className="font-num tabular-nums text-suave">{formatoHoras(t.minutos)}</span>
-                  </li>
-                ))}
-              </ul>
             )}
           </div>
         </TarjetaSaldo>

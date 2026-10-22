@@ -6,7 +6,7 @@
 //   Lo que gastes en enero sale primero de lo que te quede del año anterior.
 // - Lo pendiente de recuperar de las AP recuperables es una cuenta corriente:
 //   todo lo que te has cogido menos todo lo que has recuperado, sin importar el año.
-import { desdeISO, minutosPermiso, minutosRecuperacion, minutosTramo, sumarDias, type Semana, type TramoRecuperacion } from "./calculos";
+import { desdeISO, fechaISO, lunesDe, minutosFranja, minutosPermiso, minutosRecuperacion, sumarDias, type Semana } from "./calculos";
 
 /** Lo que escribes a mano para cada año. */
 export type SaldoAnual = {
@@ -98,69 +98,69 @@ export function consumoAnual(semanas: Semana[], anio: number, saldoDe: (anio: nu
   };
 }
 
-/** Un tramo de recuperación con el día de AP recuperables del que sale. */
-export type TramoConOrigen = TramoRecuperacion & { minutos: number; origen: string };
-
-/** Todos los tramos de recuperación programados, ordenados por fecha y hora. */
-export function todosLosTramos(semanas: Semana[]): TramoConOrigen[] {
-  const lista: TramoConOrigen[] = [];
-  for (const s of semanas) {
-    const lunes = desdeISO(s.lunes);
-    s.dias.forEach((d, i) => {
-      if (d.tipo !== "ap-recuperables") return;
-      const f = sumarDias(lunes, i);
-      const origen = `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, "0")}-${String(f.getDate()).padStart(2, "0")}`;
-      for (const t of d.recuperaciones ?? []) lista.push({ ...t, minutos: minutosTramo(t), origen });
-    });
-  }
-  return lista.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.desde.localeCompare(b.desde));
-}
-
-/** Tramos de recuperación que caen en un día concreto ("2026-10-22"). */
-export const tramosDelDia = (semanas: Semana[], fecha: string) => todosLosTramos(semanas).filter((t) => t.fecha === fecha && t.minutos > 0);
-
 /**
  * Cuenta de AP recuperables:
  * - cogido: horas de AP recuperables que te has cogido
- * - recuperado: tramos ya pasados (hasta hoy incluido) + recuperación escrita a mano en versiones anteriores
- * - programado: tramos con fecha posterior a hoy
- * - pendiente: lo que falta por recuperar (cogido − recuperado; negativo = recuperado por adelantado)
- * - sinProgramar: lo pendiente que aún no tiene día asignado
+ * - recuperado: franjas de recuperación que has apuntado en tus días (y lo escrito sin franja antes)
+ * - pendiente: cogido − recuperado (negativo = recuperado por adelantado)
  */
-export function pendienteDeRecuperar(
-  semanas: Semana[],
-  hoyISO: string,
-): { cogido: number; recuperado: number; programado: number; pendiente: number; sinProgramar: number } {
+export function pendienteDeRecuperar(semanas: Semana[]): { cogido: number; recuperado: number; pendiente: number } {
   const sumar = (elegir: (s: Semana, i: number) => number) => usos(semanas, elegir).reduce((s, u) => s + u.cantidad, 0);
   const cogido = sumar((s, i) => (s.dias[i]?.tipo === "ap-recuperables" ? minutosPermiso(s.dias[i]!) : 0));
-  const manual = sumar((s, i) => (s.dias[i]?.tipo === "trabajo" ? minutosRecuperacion(s.dias[i]!) : 0));
-  const tramos = todosLosTramos(semanas);
-  const hecho = tramos.filter((t) => t.fecha <= hoyISO).reduce((s, t) => s + t.minutos, 0);
-  const programado = tramos.filter((t) => t.fecha > hoyISO).reduce((s, t) => s + t.minutos, 0);
-  const recuperado = manual + hecho;
-  const pendiente = cogido - recuperado;
-  return { cogido, recuperado, programado, pendiente, sinProgramar: Math.max(0, pendiente - programado) };
+  const recuperado = sumar((s, i) => (s.dias[i] ? minutosRecuperacion(s.dias[i]!) : 0));
+  return { cogido, recuperado, pendiente: cogido - recuperado };
 }
 
-/** Una recuperación ya hecha: el día, la franja (si se programó con horario) y el tiempo. */
-export type RecuperacionHecha = { fecha: string; desde?: string; hasta?: string; minutos: number; origen?: string };
+/** Una recuperación apuntada: el día, la franja (si la tiene) y el tiempo. */
+export type RecuperacionHecha = { fecha: string; desde?: string; hasta?: string; minutos: number };
 
-/**
- * Horas de AP recuperables ya recuperadas (hasta hoy incluido), ordenadas por fecha:
- * los tramos programados y la recuperación escrita a mano en la versión anterior.
- */
-export function recuperacionesHechas(semanas: Semana[], hoyISO: string): RecuperacionHecha[] {
-  const lista: RecuperacionHecha[] = todosLosTramos(semanas)
-    .filter((t) => t.fecha <= hoyISO && t.minutos > 0)
-    .map((t) => ({ fecha: t.fecha, desde: t.desde, hasta: t.hasta, minutos: t.minutos, origen: t.origen }));
+/** Todas las horas recuperadas, ordenadas por día y hora. */
+export function recuperacionesHechas(semanas: Semana[]): RecuperacionHecha[] {
+  const lista: RecuperacionHecha[] = [];
   for (const s of semanas) {
     const lunes = desdeISO(s.lunes);
     s.dias.forEach((d, i) => {
-      if (d.tipo !== "trabajo" || minutosRecuperacion(d) <= 0) return;
-      const f = sumarDias(lunes, i);
-      const fecha = `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, "0")}-${String(f.getDate()).padStart(2, "0")}`;
-      lista.push({ fecha, minutos: minutosRecuperacion(d) });
+      const fecha = fechaISO(sumarDias(lunes, i));
+      for (const f of d.franjasRecuperacion ?? []) {
+        const minutos = minutosFranja(f);
+        if (minutos > 0) lista.push({ fecha, desde: f.desde, hasta: f.hasta, minutos });
+      }
+      if ((d.minutosRecuperacion ?? 0) > 0) lista.push({ fecha, minutos: d.minutosRecuperacion! });
     });
   }
   return lista.sort((a, b) => a.fecha.localeCompare(b.fecha) || (a.desde ?? "").localeCompare(b.desde ?? ""));
+}
+
+/**
+ * Pasa los tramos que se programaron desde el día de AP recuperables (versión de ayer)
+ * a su día de recuperación como franjas escritas a mano.
+ * Devuelve todas las semanas y las que han cambiado (para guardarlas).
+ */
+export function migrarTramosProgramados(semanas: Semana[], semanaVacia: (lunes: Date) => Semana): { semanas: Semana[]; cambiadas: Semana[] } {
+  const hayAlguno = semanas.some((s) => s.dias.some((d) => (d.recuperaciones ?? []).length > 0));
+  if (!hayAlguno) return { semanas, cambiadas: [] };
+  const mapa = new Map(semanas.map((s) => [s.lunes, { ...s, dias: s.dias.map((d) => ({ ...d })) }]));
+  const cambiadas = new Set<string>();
+  for (const s of semanas) {
+    s.dias.forEach((d, i) => {
+      const tramos = d.recuperaciones ?? [];
+      if (!tramos.length) return;
+      const origen = mapa.get(s.lunes)!;
+      delete origen.dias[i]!.recuperaciones;
+      cambiadas.add(s.lunes);
+      for (const t of tramos) {
+        const fecha = desdeISO(t.fecha);
+        const indice = (fecha.getDay() + 6) % 7;
+        if (indice > 4 || minutosFranja(t) === 0) continue; // fin de semana o franja mal escrita: se descarta
+        const lunes = fechaISO(lunesDe(fecha));
+        const destino = mapa.get(lunes) ?? { ...semanaVacia(fecha), dias: semanaVacia(fecha).dias.map((x) => ({ ...x })) };
+        const dia = destino.dias[indice]!;
+        dia.franjasRecuperacion = [...(dia.franjasRecuperacion ?? []), { id: t.id, desde: t.desde, hasta: t.hasta }];
+        mapa.set(lunes, destino);
+        cambiadas.add(lunes);
+      }
+    });
+  }
+  const lista = [...mapa.values()];
+  return { semanas: lista, cambiadas: lista.filter((s) => cambiadas.has(s.lunes)) };
 }

@@ -1,11 +1,8 @@
-import { CalendarClock, Plus, Trash2 } from "lucide-react";
+import { RotateCcw, Plus, Trash2 } from "lucide-react";
 import {
-  DIAS_SEMANA, MENSAJE_ERROR, NOMBRE_TIPO, TIPOS_DIA_COMPLETO, aMinutos, esPorHoras, fechaISO, formatoHoras, minutosPermiso,
-  minutosProgramados, minutosRecuperacion, minutosTramo, sumarDias, desdeISO,
-  type RegistroDia, type ResultadoDia, type TipoDia, type TramoRecuperacion,
+  DIAS_SEMANA, MENSAJE_ERROR, NOMBRE_TIPO, TIPOS_DIA_COMPLETO, aMinutos, esPorHoras, formatoHoras, minutosFranja, minutosPermiso,
+  minutosRecuperacion, type FranjaRecuperacion, type RegistroDia, type ResultadoDia, type TipoDia,
 } from "./calculos";
-import type { TramoConOrigen } from "./saldos";
-import { primerLaborable } from "./agenda";
 import { nuevoId } from "./extensiones";
 import { ESTADO } from "./colores";
 import CampoHorasMinutos from "./CampoHorasMinutos";
@@ -17,7 +14,6 @@ type Props = {
   resultado: ResultadoDia;
   esHoy: boolean;
   cuentaAusencia: boolean;
-  recuperacionesDelDia: TramoConOrigen[]; // tramos de AP recuperables que se recuperan este día
   onCambiar: (r: RegistroDia) => void;
 };
 
@@ -31,15 +27,15 @@ const campo =
   "w-full min-w-0 rounded-lg border border-borde bg-fondo px-2.5 py-2 font-num text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-principal disabled:opacity-40";
 const etiquetaCampo = "grid gap-1 text-[11px] font-semibold uppercase tracking-wider text-suave";
 
-const diaCorto = (iso: string) => desdeISO(iso).toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "short" });
-
-/** ¿El tramo coincide con el horario de entrada y salida de ese día? */
-function seSolapa(t: { desde: string; hasta: string }, r: RegistroDia): boolean {
-  const a = aMinutos(r.entrada), b = aMinutos(r.salida), c = aMinutos(t.desde), d = aMinutos(t.hasta);
-  return a !== null && b !== null && c !== null && d !== null && c < b && d > a;
+/** ¿La franja está entera dentro de la entrada y salida del día? */
+function dentroDelHorario(f: { desde: string; hasta: string }, r: RegistroDia): boolean {
+  const a = aMinutos(r.entrada), b = aMinutos(r.salida), c = aMinutos(f.desde), d = aMinutos(f.hasta);
+  if (a === null || b === null || c === null || d === null) return true; // sin horario completo no se avisa
+  return c >= a && d <= b;
 }
 
-export default function TarjetaDia({ indice, fecha, registro, resultado, esHoy, cuentaAusencia, recuperacionesDelDia, onCambiar }: Props) {
+
+export default function TarjetaDia({ indice, fecha, registro, resultado, esHoy, cuentaAusencia, onCambiar }: Props) {
   const porHoras = esPorHoras(registro.tipo);
   const esTrabajo = registro.tipo === "trabajo" || porHoras; // en días por horas también puedes poner la parte trabajada
   const noComputa = TIPOS_DIA_COMPLETO.includes(registro.tipo) && !cuentaAusencia;
@@ -47,20 +43,16 @@ export default function TarjetaDia({ indice, fecha, registro, resultado, esHoy, 
   const textoChip = resultado.estado === "ausencia" ? NOMBRE_TIPO[registro.tipo] : estado.texto;
   const id = `dia-${indice}`;
 
-  // Tramos de recuperación (solo en días de AP recuperables)
-  const tramos = registro.recuperaciones ?? [];
-  const permiso = minutosPermiso(registro);
-  const programado = minutosProgramados(registro);
-  const cambiarTramo = (tid: string, cambios: Partial<TramoRecuperacion>) =>
-    onCambiar({ ...registro, recuperaciones: tramos.map((t) => (t.id === tid ? { ...t, ...cambios } : t)) });
-  const anadirTramo = () => {
-    const siguiente = primerLaborable(fechaISO(sumarDias(fecha, 1)));
-    onCambiar({ ...registro, recuperaciones: [...tramos, { id: nuevoId(), fecha: siguiente, desde: "", hasta: "" }] });
-  };
-  const quitarTramo = (tid: string) => onCambiar({ ...registro, recuperaciones: tramos.filter((t) => t.id !== tid) });
-
-  const recuperaHoy = recuperacionesDelDia.reduce((s, t) => s + t.minutos, 0);
-  const solapados = recuperacionesDelDia.filter((t) => seSolapa(t, registro));
+  // Recuperación de AP recuperables: franjas que escribes tú en el día en que recuperas
+  const franjas = registro.franjasRecuperacion ?? [];
+  const sinFranja = registro.minutosRecuperacion ?? 0;
+  const recuperado = minutosRecuperacion(registro);
+  const cambiarFranja = (fid: string, cambios: Partial<FranjaRecuperacion>) =>
+    onCambiar({ ...registro, franjasRecuperacion: franjas.map((f) => (f.id === fid ? { ...f, ...cambios } : f)) });
+  const anadirFranja = () =>
+    onCambiar({ ...registro, franjasRecuperacion: [...franjas, { id: nuevoId(), desde: registro.salida || "", hasta: "" }] });
+  const quitarFranja = (fid: string) => onCambiar({ ...registro, franjasRecuperacion: franjas.filter((f) => f.id !== fid) });
+  const fueraDeHorario = franjas.some((f) => minutosFranja(f) > 0 && !dentroDelHorario(f, registro));
 
   return (
     <article
@@ -111,7 +103,7 @@ export default function TarjetaDia({ indice, fecha, registro, resultado, esHoy, 
               {ETIQUETA_HORAS[registro.tipo]}
             </label>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <CampoHorasMinutos id={`${id}-permiso`} etiqueta={ETIQUETA_HORAS[registro.tipo] ?? "Horas"} minutos={permiso}
+              <CampoHorasMinutos id={`${id}-permiso`} etiqueta={ETIQUETA_HORAS[registro.tipo] ?? "Horas"} minutos={minutosPermiso(registro)}
                 onCambiar={(m) => onCambiar({ ...registro, minutosAsuntosPropios: undefined, minutosPermiso: m })} />
               <span className="text-xs text-suave">
                 {registro.entrada || registro.salida ? "Se suman a las horas trabajadas." : "Deja entrada y salida vacías si no has trabajado."}
@@ -120,83 +112,63 @@ export default function TarjetaDia({ indice, fecha, registro, resultado, esHoy, 
           </div>
         )}
 
-        {registro.tipo === "ap-recuperables" && (
+        {registro.tipo === "trabajo" && franjas.length === 0 && sinFranja === 0 && (
+          <button type="button" onClick={anadirFranja}
+            className="col-span-2 flex w-fit items-center gap-1 text-xs font-semibold text-ausencia hover:underline sm:col-span-4">
+            <Plus size={14} /> Añadir recuperación de AP recuperables
+          </button>
+        )}
+
+        {registro.tipo === "trabajo" && (franjas.length > 0 || sinFranja > 0) && (
           <div className="col-span-2 grid gap-2 rounded-xl border border-ausencia/30 bg-ausencia/5 p-3 sm:col-span-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ausencia">
-                <CalendarClock size={14} /> Recuperación
+                <RotateCcw size={14} /> Recuperación de AP recuperables
               </p>
-              {permiso > 0 && (
-                <p className={`font-num text-xs font-bold tabular-nums ${
-                  programado === permiso ? "text-cumplido" : programado > permiso ? "text-pendiente" : "text-suave"
-                }`}>
-                  Programado {formatoHoras(programado)} de {formatoHoras(permiso)}
-                </p>
-              )}
+              <p className="font-num text-xs font-bold tabular-nums text-ausencia">{formatoHoras(recuperado)}</p>
             </div>
-            {tramos.map((t, n) => {
-              const mal = t.desde !== "" && t.hasta !== "" && minutosTramo(t) === 0;
+            {franjas.map((f, n) => {
+              const mal = f.desde !== "" && f.hasta !== "" && minutosFranja(f) === 0;
               return (
-                <div key={t.id} className="grid gap-1">
+                <div key={f.id} className="grid gap-1">
                   <div className="flex flex-wrap items-end gap-2">
-                    <label className={etiquetaCampo} htmlFor={`${id}-rec-${n}-fecha`}>
-                      Día
-                      <input id={`${id}-rec-${n}-fecha`} type="date" className={`${campo} w-auto`} value={t.fecha}
-                        onChange={(e) => e.target.value && cambiarTramo(t.id, { fecha: e.target.value })} />
-                    </label>
                     <label className={etiquetaCampo} htmlFor={`${id}-rec-${n}-desde`}>
                       De
-                      <input id={`${id}-rec-${n}-desde`} type="time" className={`${campo} w-auto`} value={t.desde}
-                        onChange={(e) => cambiarTramo(t.id, { desde: e.target.value })} />
+                      <input id={`${id}-rec-${n}-desde`} type="time" className={`${campo} w-auto`} value={f.desde}
+                        onChange={(e) => cambiarFranja(f.id, { desde: e.target.value })} />
                     </label>
                     <label className={etiquetaCampo} htmlFor={`${id}-rec-${n}-hasta`}>
                       A
-                      <input id={`${id}-rec-${n}-hasta`} type="time" className={`${campo} w-auto`} value={t.hasta}
-                        onChange={(e) => cambiarTramo(t.id, { hasta: e.target.value })} />
+                      <input id={`${id}-rec-${n}-hasta`} type="time" className={`${campo} w-auto`} value={f.hasta}
+                        onChange={(e) => cambiarFranja(f.id, { hasta: e.target.value })} />
                     </label>
-                    <span className="pb-2 font-num text-sm font-bold tabular-nums text-ausencia">{minutosTramo(t) ? formatoHoras(minutosTramo(t)) : ""}</span>
-                    <button type="button" onClick={() => quitarTramo(t.id)} aria-label="Quitar este tramo"
+                    <span className="pb-2 font-num text-sm font-bold tabular-nums text-ausencia">
+                      {minutosFranja(f) ? `= ${formatoHoras(minutosFranja(f))}` : ""}
+                    </span>
+                    <button type="button" onClick={() => quitarFranja(f.id)} aria-label="Quitar esta franja"
                       className="mb-1 rounded-lg p-1.5 text-suave hover:text-pendiente"><Trash2 size={16} /></button>
                   </div>
                   {mal && <p className="text-xs font-medium text-pendiente">La hora final debe ser posterior a la inicial.</p>}
                 </div>
               );
             })}
-            <button type="button" onClick={anadirTramo}
-              className="flex w-fit items-center gap-1 text-xs font-semibold text-ausencia hover:underline">
-              <Plus size={14} /> {tramos.length ? "Añadir otro tramo" : "Programar día y horario de recuperación"}
-            </button>
-            {programado > permiso && permiso > 0 && (
-              <p className="text-xs font-medium text-pendiente">Has programado más tiempo del que te has cogido.</p>
+            {sinFranja > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <label htmlFor={`${id}-recuperacion`} className="text-xs text-suave">Apuntado sin franja:</label>
+                <CampoHorasMinutos id={`${id}-recuperacion`} etiqueta="Recuperación sin franja" minutos={sinFranja}
+                  onCambiar={(m) => onCambiar({ ...registro, minutosRecuperacion: m })} />
+              </div>
             )}
-          </div>
-        )}
-
-        {/* Recuperación escrita a mano en la versión anterior: se muestra solo si había algo */}
-        {registro.tipo === "trabajo" && minutosRecuperacion(registro) > 0 && (
-          <div className="col-span-2 grid gap-1 sm:col-span-4">
-            <label htmlFor={`${id}-recuperacion`} className="text-[11px] font-semibold uppercase tracking-wider text-ausencia">
-              Recuperación escrita a mano
-            </label>
-            <CampoHorasMinutos id={`${id}-recuperacion`} etiqueta="Recuperación" minutos={minutosRecuperacion(registro)}
-              onCambiar={(m) => onCambiar({ ...registro, minutosRecuperacion: m })} />
-          </div>
-        )}
-
-        {recuperacionesDelDia.length > 0 && (
-          <div className="col-span-2 grid gap-1 rounded-xl bg-ausencia/10 px-3 py-2 text-sm sm:col-span-4">
-            {recuperacionesDelDia.map((t) => (
-              <p key={t.id} className="flex flex-wrap items-center gap-x-2">
-                <CalendarClock size={14} className="text-ausencia" />
-                <span className="font-semibold text-ausencia">Recuperación {t.desde}–{t.hasta}</span>
-                <span className="font-num tabular-nums">{formatoHoras(t.minutos)}</span>
-                <span className="text-xs text-suave">· de las AP recuperables del {diaCorto(t.origen)}</span>
-              </p>
-            ))}
-            {solapados.length > 0 && (
+            <button type="button" onClick={anadirFranja} className="flex w-fit items-center gap-1 text-xs font-semibold text-ausencia hover:underline">
+              <Plus size={14} /> Añadir otra franja
+            </button>
+            <p className="text-xs text-suave">
+              Pon tu entrada y salida reales. El tiempo de recuperación no cuenta en las horas del día y se descuenta de lo pendiente de
+              recuperar.
+            </p>
+            {fueraDeHorario && (
               <p className="text-xs font-medium text-pendiente">
-                La recuperación coincide con tu horario de entrada y salida. Pon como salida la hora en que acaba tu jornada normal: la
-                recuperación se suma aparte.
+                Alguna franja queda fuera de tu entrada y salida. Revisa la salida: tiene que ser la hora real a la que te fuiste.
               </p>
             )}
           </div>
@@ -211,8 +183,11 @@ export default function TarjetaDia({ indice, fecha, registro, resultado, esHoy, 
           }`}>
             {noComputa ? "No computa" : formatoHoras(resultado.diferencia, true)}
           </p>
-          {recuperaHoy > 0 && (
-            <p className="font-num text-xs font-bold tabular-nums text-ausencia">+{formatoHoras(recuperaHoy)} recuperación</p>
+          {registro.tipo === "trabajo" && recuperado > 0 && !resultado.error && (
+            <>
+              <p className="font-num text-xs font-bold tabular-nums text-ausencia">{formatoHoras(recuperado)} recuperadas</p>
+              <p className="font-num text-[11px] tabular-nums text-suave">En el centro: {formatoHoras(resultado.minutos + recuperado)}</p>
+            </>
           )}
         </div>
       </div>

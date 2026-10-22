@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { consumoAnual, pendienteDeRecuperar, recuperacionesHechas, tramosDelDia, SALDO_VACIO, type SaldoAnual } from "./saldos";
+import { consumoAnual, migrarTramosProgramados, pendienteDeRecuperar, recuperacionesHechas, SALDO_VACIO, type SaldoAnual } from "./saldos";
+import { calcularDia, calcularSemana, semanaNueva } from "./calculos";
 import type { RegistroDia, Semana } from "./calculos";
 
 const dia = (r: Partial<RegistroDia>): RegistroDia => ({ entrada: "", salida: "", pausa: 0, tipo: "trabajo", ...r });
@@ -38,41 +39,54 @@ describe("Saldos anuales", () => {
     expect(consumoAnual(semanas, 2027, saldoDe).apMinutos).toBe(120);
   });
   it("lo pendiente de recuperar es lo cogido menos lo recuperado", () =>
-    expect(pendienteDeRecuperar(semanas, "2026-10-23")).toEqual({ cogido: 120, recuperado: 45, programado: 0, pendiente: 75, sinProgramar: 75 }));
+    expect(pendienteDeRecuperar(semanas)).toEqual({ cogido: 120, recuperado: 45, pendiente: 75 }));
 
 });
 
-describe("Tramos de recuperación de AP recuperables", () => {
-  // Martes 20: 2 h de AP recuperables, que se recuperan el jueves 22 de 15:30 a 16:30 y el martes 27 de 15:30 a 16:30
+describe("Recuperación de AP recuperables apuntada a mano con franja", () => {
+  // Martes: trabaja de 08:00 a 13:15 y coge 2 h 15 min de AP recuperables.
+  // Jueves: entrada 08:00 y salida real 16:45; marca a mano que de 15:30 a 16:45 es recuperación.
   const semanas: Semana[] = [
     semana("2026-10-19", [
       libre(),
-      dia({
-        tipo: "ap-recuperables",
-        minutosPermiso: 120,
-        recuperaciones: [
-          { id: "t1", fecha: "2026-10-22", desde: "15:30", hasta: "16:30" },
-          { id: "t2", fecha: "2026-10-27", desde: "15:30", hasta: "16:30" },
-        ],
-      }),
+      dia({ tipo: "ap-recuperables", entrada: "08:00", salida: "13:15", minutosPermiso: 135 }),
+      libre(),
+      dia({ entrada: "08:00", salida: "16:45", franjasRecuperacion: [{ id: "f", desde: "15:30", hasta: "16:45" }] }),
+      libre(),
+    ]),
+  ];
+  const s = semanas[0]!;
+  it("el día de AP recuperables cuenta lo trabajado más las horas cogidas", () => expect(calcularDia(s.dias[1]!, 37.5, true).minutos).toBe(450));
+  it("la franja de recuperación no cuenta en las horas del día", () => expect(calcularDia(s.dias[3]!, 37.5, true).minutos).toBe(450));
+  it("la semana no la cuenta dos veces", () => expect(calcularSemana(s).computado).toBe(900));
+  it("lo recuperado se descuenta de lo pendiente", () =>
+    expect(pendienteDeRecuperar(semanas)).toEqual({ cogido: 135, recuperado: 75, pendiente: 60 }));
+  it("la lista de horas recuperadas muestra el día, la franja y el tiempo", () =>
+    expect(recuperacionesHechas(semanas)).toEqual([{ fecha: "2026-10-22", desde: "15:30", hasta: "16:45", minutos: 75 }]));
+  it("si no marcas la franja, esas horas cuentan como trabajadas", () =>
+    expect(calcularDia({ ...s.dias[3]!, franjasRecuperacion: [] }, 37.5, true).minutos).toBe(525));
+  it("incluye lo apuntado sin franja en la versión anterior", () =>
+    expect(recuperacionesHechas([semana("2026-10-19", [dia({ entrada: "08:00", salida: "16:00", minutosRecuperacion: 45 }), libre(), libre(), libre(), libre()])]))
+      .toEqual([{ fecha: "2026-10-19", minutos: 45 }]));
+});
+
+describe("Paso de recuperaciones programadas con la versión anterior", () => {
+  const conTramos: Semana[] = [
+    semana("2026-10-19", [
+      libre(),
+      dia({ tipo: "ap-recuperables", minutosPermiso: 135, recuperaciones: [
+        { id: "a", fecha: "2026-10-22", desde: "15:30", hasta: "16:45" },
+        { id: "b", fecha: "2026-10-27", desde: "15:30", hasta: "16:30" }, // semana que aún no existe
+      ] }),
       libre(), libre(), libre(),
     ]),
   ];
-  it("el tramo aparece en su día de recuperación", () => {
-    const t = tramosDelDia(semanas, "2026-10-22");
-    expect(t.map((x) => [x.desde, x.hasta, x.minutos, x.origen])).toEqual([["15:30", "16:30", 60, "2026-10-20"]]);
+  const r = migrarTramosProgramados(conTramos, (f) => semanaNueva(f, 35, true));
+  const porLunes = Object.fromEntries(r.semanas.map((x) => [x.lunes, x]));
+  it("cada tramo pasa a su día como franja", () => {
+    expect(porLunes["2026-10-19"]?.dias[3]?.franjasRecuperacion).toEqual([{ id: "a", desde: "15:30", hasta: "16:45" }]);
+    expect(porLunes["2026-10-26"]?.dias[1]?.franjasRecuperacion).toEqual([{ id: "b", desde: "15:30", hasta: "16:30" }]);
   });
-  it("los tramos pasados cuentan como recuperados y los futuros como programados", () =>
-    expect(pendienteDeRecuperar(semanas, "2026-10-23")).toEqual({ cogido: 120, recuperado: 60, programado: 60, pendiente: 60, sinProgramar: 0 }));
-  it("cuando pasan todos los tramos, no queda nada pendiente", () =>
-    expect(pendienteDeRecuperar(semanas, "2026-10-28").pendiente).toBe(0));
-  it("un tramo mal escrito no cuenta", () =>
-    expect(tramosDelDia([semana("2026-10-19", [dia({ tipo: "ap-recuperables", minutosPermiso: 60, recuperaciones: [{ id: "x", fecha: "2026-10-22", desde: "17:00", hasta: "16:00" }] }), libre(), libre(), libre(), libre()])], "2026-10-22")).toEqual([]));
-  it("lista las horas recuperadas con su día y franja, sin las programadas para más adelante", () =>
-    expect(recuperacionesHechas(semanas, "2026-10-23")).toEqual([
-      { fecha: "2026-10-22", desde: "15:30", hasta: "16:30", minutos: 60, origen: "2026-10-20" },
-    ]));
-  it("incluye la recuperación escrita a mano", () =>
-    expect(recuperacionesHechas([semana("2026-10-19", [dia({ entrada: "08:00", salida: "16:00", minutosRecuperacion: 45 }), libre(), libre(), libre(), libre()])], "2026-10-23"))
-      .toEqual([{ fecha: "2026-10-19", minutos: 45 }]));
+  it("el día de AP recuperables se queda sin tramos programados", () => expect(porLunes["2026-10-19"]?.dias[1]?.recuperaciones).toBeUndefined());
+  it("sin tramos antiguos no cambia nada", () => expect(migrarTramosProgramados(r.semanas, (f) => semanaNueva(f, 35, true)).cambiadas).toEqual([]));
 });
