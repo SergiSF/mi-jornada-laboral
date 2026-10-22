@@ -14,7 +14,7 @@ import {
   type Saldos,
 } from "./baseDatos";
 import { SALDO_VACIO, type SaldoAnual } from "./saldos";
-import type { Agenda } from "./agenda";
+import { arrastrarPendientes, type Agenda } from "./agenda";
 import type { Extension } from "./extensiones";
 import type { Copia } from "./copia";
 
@@ -39,6 +39,7 @@ export type Almacen = {
   cambiarSaldo: (anio: number, saldo: SaldoAnual) => void;
   saldos: Saldos;
   agenda: Agenda;
+  tareasPasadas: number; // tareas sin terminar que se han pasado solas a hoy al abrir la app
   cambiarAgenda: (cambio: (prev: Agenda) => Agenda) => void;
   extensiones: Extension[];
   cambiarExtensiones: (lista: Extension[]) => void;
@@ -59,6 +60,7 @@ export function useSemanas(): Almacen {
   const [ejemplo, setEjemplo] = useState<Semana | null>(null);
   const [saldos, setSaldos] = useState<Saldos>({});
   const [agenda, setAgenda] = useState<Agenda>({});
+  const [tareasPasadas, setTareasPasadas] = useState(0);
   const [extensiones, setExtensiones] = useState<Extension[]>([]);
 
   const fallo = () =>
@@ -70,7 +72,13 @@ export function useSemanas(): Almacen {
     leerTodo()
       .then(({ semanas, ajustes: a, saldos: sal, agenda: ag, extensiones: ext }) => {
         setSaldos(sal);
-        setAgenda(ag);
+        // Las tareas sin terminar de días anteriores pasan solas al siguiente día laborable
+        const { agenda: alDia, movidas } = arrastrarPendientes(ag, fechaISO(new Date()));
+        setAgenda(alDia);
+        if (movidas) {
+          setTareasPasadas(movidas);
+          guardarDato("agenda", alDia).catch(fallo);
+        }
         setExtensiones(ext);
         setMapa(Object.fromEntries(semanas.map((s) => [s.lunes, s])));
         setAjustes(a);
@@ -107,6 +115,29 @@ export function useSemanas(): Almacen {
       guardarDato("agenda", nueva).catch(fallo);
       return nueva;
     });
+  }, []);
+
+  // Si la app se queda abierta de un día para otro, también se pasan las tareas al cambiar de día
+  useEffect(() => {
+    let ultimoDia = fechaISO(new Date());
+    const revisar = () => {
+      const hoy = fechaISO(new Date());
+      if (hoy === ultimoDia) return;
+      ultimoDia = hoy;
+      setAgenda((prev) => {
+        const { agenda: alDia, movidas } = arrastrarPendientes(prev, hoy);
+        if (!movidas) return prev;
+        setTareasPasadas(movidas);
+        guardarDato("agenda", alDia).catch(fallo);
+        return alDia;
+      });
+    };
+    const reloj = window.setInterval(revisar, 60_000);
+    document.addEventListener("visibilitychange", revisar);
+    return () => {
+      window.clearInterval(reloj);
+      document.removeEventListener("visibilitychange", revisar);
+    };
   }, []);
 
   const cambiarExtensiones = useCallback((lista: Extension[]) => {
@@ -179,6 +210,7 @@ export function useSemanas(): Almacen {
     cambiarSaldo,
     saldos,
     agenda,
+    tareasPasadas,
     cambiarAgenda,
     extensiones,
     cambiarExtensiones,

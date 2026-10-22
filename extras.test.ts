@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buscar, leerListado, separarNumeros, type Extension } from "./extensiones";
-import { ordenarNotas, pendientesAnteriores, buscarEnAgenda, type Agenda } from "./agenda";
+import { ordenarNotas, arrastrarPendientes, primerLaborable, diasLaborablesEntre, buscarEnAgenda, type Agenda } from "./agenda";
 
 const lista: Extension[] = [
   { id: "1", area: "Mòdul 1", nombre: "Consulta Mèdica", numeros: ["3604"] },
@@ -23,10 +23,29 @@ describe("Agenda", () => {
   const n = (id: string, hora: string, creada: number, hecha = false) => ({ id, texto: `Nota ${id}`, hora, hecha, creada });
   it("ordena primero por hora y luego por orden de creación", () =>
     expect(ordenarNotas([n("a", "", 1), n("b", "10:00", 2), n("c", "09:00", 3), n("d", "", 0)]).map((x) => x.id)).toEqual(["c", "b", "d", "a"]));
-  it("encuentra las tareas sin hacer de días anteriores", () => {
-    const agenda: Agenda = { "2026-10-19": [n("a", "", 1), n("b", "", 2, true)], "2026-10-21": [n("c", "", 3)] };
-    expect(pendientesAnteriores(agenda, "2026-10-21").map((x) => x.nota.id)).toEqual(["a"]);
+  it("pasa las tareas sin hacer de días anteriores a hoy y recuerda de qué día vienen", () => {
+    const agenda: Agenda = { "2026-10-19": [n("a", "", 1), n("b", "", 2, true)], "2026-10-21": [n("c", "", 3)], "2026-10-23": [n("d", "", 4)] };
+    const r = arrastrarPendientes(agenda, "2026-10-21");
+    expect(r.movidas).toBe(1);
+    expect(r.agenda["2026-10-19"]?.map((x) => x.id)).toEqual(["b"]); // las hechas se quedan en su día
+    expect(r.agenda["2026-10-21"]?.map((x) => [x.id, x.origen])).toEqual([["c", undefined], ["a", "2026-10-19"]]);
+    expect(r.agenda["2026-10-23"]?.map((x) => x.id)).toEqual(["d"]); // los días futuros no se tocan
   });
+  it("si hoy es sábado, las tareas del viernes pasan al lunes", () => {
+    const r = arrastrarPendientes({ "2026-10-23": [n("a", "", 1)] }, "2026-10-24");
+    expect(Object.keys(r.agenda)).toEqual(["2026-10-26"]);
+  });
+  it("una tarea que se va pasando conserva el día en que se apuntó", () => {
+    const una = arrastrarPendientes({ "2026-10-19": [n("a", "", 1)] }, "2026-10-20").agenda;
+    const dos = arrastrarPendientes(una, "2026-10-22").agenda;
+    expect(dos["2026-10-22"]?.[0]?.origen).toBe("2026-10-19");
+  });
+  it("sin tareas pendientes no cambia nada", () => {
+    const agenda: Agenda = { "2026-10-19": [n("a", "", 1, true)] };
+    expect(arrastrarPendientes(agenda, "2026-10-21").agenda).toBe(agenda);
+  });
+  it("el primer día laborable desde un domingo es el lunes", () => expect(primerLaborable("2026-10-25")).toBe("2026-10-26"));
+  it("cuenta los días laborables entre dos fechas", () => expect(diasLaborablesEntre("2026-10-23", "2026-10-27")).toBe(2));
   it("busca texto en toda la agenda", () =>
     expect(buscarEnAgenda({ "2026-10-20": [{ ...n("a", "", 1), texto: "Llamar a Gestió Econòmica" }] }, "economica")).toHaveLength(1));
 });

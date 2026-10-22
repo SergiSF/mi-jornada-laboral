@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { consumoAnual, pendienteDeRecuperar, SALDO_VACIO, type SaldoAnual } from "./saldos";
+import { consumoAnual, pendienteDeRecuperar, tramosDelDia, SALDO_VACIO, type SaldoAnual } from "./saldos";
 import type { RegistroDia, Semana } from "./calculos";
 
 const dia = (r: Partial<RegistroDia>): RegistroDia => ({ entrada: "", salida: "", pausa: 0, tipo: "trabajo", ...r });
@@ -38,5 +38,34 @@ describe("Saldos anuales", () => {
     expect(consumoAnual(semanas, 2027, saldoDe).apMinutos).toBe(120);
   });
   it("lo pendiente de recuperar es lo cogido menos lo recuperado", () =>
-    expect(pendienteDeRecuperar(semanas)).toEqual({ cogido: 120, recuperado: 45, pendiente: 75 }));
+    expect(pendienteDeRecuperar(semanas, "2026-10-23")).toEqual({ cogido: 120, recuperado: 45, programado: 0, pendiente: 75, sinProgramar: 75 }));
+
+});
+
+describe("Tramos de recuperación de AP recuperables", () => {
+  // Martes 20: 2 h de AP recuperables, que se recuperan el jueves 22 de 15:30 a 16:30 y el martes 27 de 15:30 a 16:30
+  const semanas: Semana[] = [
+    semana("2026-10-19", [
+      libre(),
+      dia({
+        tipo: "ap-recuperables",
+        minutosPermiso: 120,
+        recuperaciones: [
+          { id: "t1", fecha: "2026-10-22", desde: "15:30", hasta: "16:30" },
+          { id: "t2", fecha: "2026-10-27", desde: "15:30", hasta: "16:30" },
+        ],
+      }),
+      libre(), libre(), libre(),
+    ]),
+  ];
+  it("el tramo aparece en su día de recuperación", () => {
+    const t = tramosDelDia(semanas, "2026-10-22");
+    expect(t.map((x) => [x.desde, x.hasta, x.minutos, x.origen])).toEqual([["15:30", "16:30", 60, "2026-10-20"]]);
+  });
+  it("los tramos pasados cuentan como recuperados y los futuros como programados", () =>
+    expect(pendienteDeRecuperar(semanas, "2026-10-23")).toEqual({ cogido: 120, recuperado: 60, programado: 60, pendiente: 60, sinProgramar: 0 }));
+  it("cuando pasan todos los tramos, no queda nada pendiente", () =>
+    expect(pendienteDeRecuperar(semanas, "2026-10-28").pendiente).toBe(0));
+  it("un tramo mal escrito no cuenta", () =>
+    expect(tramosDelDia([semana("2026-10-19", [dia({ tipo: "ap-recuperables", minutosPermiso: 60, recuperaciones: [{ id: "x", fecha: "2026-10-22", desde: "17:00", hasta: "16:00" }] }), libre(), libre(), libre(), libre()])], "2026-10-22")).toEqual([]));
 });

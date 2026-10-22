@@ -1,5 +1,5 @@
 // Copias de seguridad: convertir los datos en un archivo JSON y leerlos de vuelta.
-import type { Jornada, RegistroDia, Semana, TipoDia } from "./calculos";
+import type { Jornada, RegistroDia, Semana, TipoDia, TramoRecuperacion } from "./calculos";
 import { AJUSTES_INICIALES, type Ajustes, type Saldos } from "./baseDatos";
 import { SALDO_VACIO, type SaldoAnual } from "./saldos";
 import type { Agenda } from "./agenda";
@@ -50,6 +50,15 @@ function leerDia(v: unknown): RegistroDia | null {
     if (v[campo] === undefined) continue;
     if (typeof v[campo] !== "number") return null;
     dia[campo] = v[campo] as number;
+  }
+  if (v.recuperaciones !== undefined) {
+    if (!Array.isArray(v.recuperaciones)) return null;
+    const tramos = v.recuperaciones.filter(
+      (t): t is TramoRecuperacion =>
+        esObjeto(t) && typeof t.id === "string" && typeof t.fecha === "string" && /^\d{4}-\d{2}-\d{2}$/.test(t.fecha) && esHora(t.desde) && esHora(t.hasta),
+    );
+    if (tramos.length !== v.recuperaciones.length) return null;
+    dia.recuperaciones = tramos.map((t) => ({ id: t.id, fecha: t.fecha, desde: t.desde, hasta: t.hasta }));
   }
   return dia;
 }

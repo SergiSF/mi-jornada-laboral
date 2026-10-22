@@ -1,6 +1,13 @@
 // Agenda de trabajo: notas y tareas de cada día.
 
-export type Nota = { id: string; texto: string; hora: string; hecha: boolean; creada: number };
+export type Nota = {
+  id: string;
+  texto: string;
+  hora: string;
+  hecha: boolean;
+  creada: number;
+  origen?: string; // día en que se apuntó por primera vez, si se ha ido pasando de un día a otro
+};
 export type Agenda = Record<string, Nota[]>; // clave: fecha "2026-10-21"
 
 /** Ordena: primero las que tienen hora (por hora), luego el resto en el orden en que se crearon. */
@@ -13,12 +20,48 @@ export function ordenarNotas(notas: Nota[]): Nota[] {
   });
 }
 
-/** Tareas sin hacer de días anteriores a la fecha indicada. */
-export function pendientesAnteriores(agenda: Agenda, fechaISO: string): { fecha: string; nota: Nota }[] {
-  return Object.entries(agenda)
-    .filter(([f]) => f < fechaISO)
-    .flatMap(([fecha, notas]) => notas.filter((n) => !n.hecha).map((nota) => ({ fecha, nota })))
-    .sort((a, b) => a.fecha.localeCompare(b.fecha));
+const aISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/** Primer día de lunes a viernes a partir de esa fecha (incluida). Sábado y domingo pasan al lunes. */
+export function primerLaborable(fechaISO: string): string {
+  const [a, m, d] = fechaISO.split("-").map(Number);
+  const f = new Date(a ?? 1970, (m ?? 1) - 1, d ?? 1);
+  while (f.getDay() === 0 || f.getDay() === 6) f.setDate(f.getDate() + 1);
+  return aISO(f);
+}
+
+/**
+ * Pasa las tareas sin hacer de días anteriores a hoy al siguiente día laborable
+ * (hoy, o el lunes si hoy es fin de semana). Guarda en "origen" el día en que se apuntaron.
+ * Devuelve la agenda nueva y cuántas tareas se han movido.
+ */
+export function arrastrarPendientes(agenda: Agenda, hoyISO: string): { agenda: Agenda; movidas: number } {
+  const destino = primerLaborable(hoyISO);
+  const nueva: Agenda = {};
+  const llegan: Nota[] = [];
+  for (const [fecha, notas] of Object.entries(agenda)) {
+    if (fecha >= hoyISO) {
+      nueva[fecha] = [...(nueva[fecha] ?? []), ...notas];
+      continue;
+    }
+    const quedan = notas.filter((n) => n.hecha);
+    for (const n of notas.filter((x) => !x.hecha)) llegan.push({ ...n, origen: n.origen ?? fecha });
+    if (quedan.length) nueva[fecha] = quedan;
+  }
+  if (llegan.length) nueva[destino] = [...(nueva[destino] ?? []), ...llegan];
+  return { agenda: llegan.length ? nueva : agenda, movidas: llegan.length };
+}
+
+/** Días laborables entre dos fechas (sin contar la primera). Sirve para "lleva 3 días pendiente". */
+export function diasLaborablesEntre(desdeISO: string, hastaISO: string): number {
+  const [a, m, d] = desdeISO.split("-").map(Number);
+  const f = new Date(a ?? 1970, (m ?? 1) - 1, d ?? 1);
+  let n = 0;
+  while (aISO(f) < hastaISO) {
+    f.setDate(f.getDate() + 1);
+    if (f.getDay() !== 0 && f.getDay() !== 6) n++;
+  }
+  return n;
 }
 
 /** Busca texto en toda la agenda (sin tener en cuenta acentos ni mayúsculas). */

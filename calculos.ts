@@ -39,10 +39,24 @@ export type RegistroDia = {
   pausa: number; // minutos
   tipo: TipoDia;
   minutosPermiso?: number; // en AP, AP recuperables y DR: cuánto tiempo te has cogido
-  minutosRecuperacion?: number; // en días de trabajo: parte del tiempo que sirve para recuperar AP recuperables
+  minutosRecuperacion?: number; // (versión anterior) en días de trabajo: tiempo de recuperación escrito a mano
+  recuperaciones?: TramoRecuperacion[]; // en AP recuperables: cuándo se recuperan esas horas
   /** @deprecated nombre antiguo de minutosPermiso; se sigue leyendo por compatibilidad */
   minutosAsuntosPropios?: number;
 };
+
+/** Un tramo en el que se recuperan horas de AP recuperables. */
+export type TramoRecuperacion = { id: string; fecha: string; desde: string; hasta: string };
+
+/** Minutos de un tramo de recuperación (0 si está incompleto o mal escrito). */
+export function minutosTramo(t: TramoRecuperacion): number {
+  const a = aMinutos(t.desde);
+  const b = aMinutos(t.hasta);
+  return a !== null && b !== null && b > a ? b - a : 0;
+}
+
+/** Suma de los tramos de recuperación programados en un día de AP recuperables. */
+export const minutosProgramados = (r: RegistroDia) => (r.recuperaciones ?? []).reduce((s, t) => s + minutosTramo(t), 0);
 
 export const minutosPermiso = (r: RegistroDia) => r.minutosPermiso ?? r.minutosAsuntosPropios ?? 0;
 export const minutosRecuperacion = (r: RegistroDia) => r.minutosRecuperacion ?? 0;
@@ -283,7 +297,9 @@ export function resumenSemanal(semana: Semana): string {
     if (esPorHoras(d.tipo)) {
       const trabajo = d.entrada && d.salida ? `${d.entrada}–${d.salida}, ` : "";
       const nombre = d.tipo === "asuntos-propios" ? "asuntos propios" : d.tipo === "dr" ? "DR" : "AP recuperables";
-      detalle = ` (${trabajo}${nombre} ${formatoHoras(minutosPermiso(d))})`;
+      const tramos = (d.recuperaciones ?? []).filter((t) => minutosTramo(t) > 0)
+        .map((t) => `recupera ${desdeISO(t.fecha).toLocaleDateString("es-ES")} ${t.desde}–${t.hasta}`);
+      detalle = ` (${[`${trabajo}${nombre} ${formatoHoras(minutosPermiso(d))}`, ...tramos].join(", ")})`;
     } else if (d.tipo !== "trabajo") {
       detalle = ` (${NOMBRE_TIPO[d.tipo]})`;
     } else if (d.entrada && d.salida) {

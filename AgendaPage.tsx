@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Search, X, ArrowDownToLine, NotebookPen } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, Search, X, NotebookPen, History, Info } from "lucide-react";
 import { DIAS_SEMANA, desdeISO, fechaISO, lunesDe, sumarDias } from "./calculos";
-import { buscarEnAgenda, ordenarNotas, pendientesAnteriores, type Nota } from "./agenda";
+import { buscarEnAgenda, diasLaborablesEntre, ordenarNotas, type Nota } from "./agenda";
 import { nuevoId } from "./extensiones";
 import type { Almacen } from "./useSemanas";
 
@@ -23,7 +23,7 @@ export default function AgendaPage({ almacen, fecha, onFecha }: Props) {
   const [consulta, setConsulta] = useState("");
 
   const notas = ordenarNotas(agenda[fecha] ?? []);
-  const pendientes = fecha === hoy ? pendientesAnteriores(agenda, hoy) : [];
+  const arrastradas = notas.filter((n) => !n.hecha && n.origen && n.origen < fecha).length;
   const resultados = buscarEnAgenda(agenda, consulta);
   const lunes = lunesDe(desdeISO(fecha));
   const hechas = notas.filter((n) => n.hecha).length;
@@ -48,15 +48,6 @@ export default function AgendaPage({ almacen, fecha, onFecha }: Props) {
     setTexto("");
     setHora("");
   };
-
-  const pasarAHoy = (dia: string, nota: Nota) =>
-    cambiarAgenda((prev) => {
-      const copia = { ...prev, [hoy]: [...(prev[hoy] ?? []), { ...nota, creada: Date.now() }] };
-      const quedan = (prev[dia] ?? []).filter((n) => n.id !== nota.id);
-      if (quedan.length) copia[dia] = quedan;
-      else delete copia[dia];
-      return copia;
-    });
 
   const guardarEdicion = (id: string) => {
     if (borrador.trim()) actualizar(fecha, id, { texto: borrador.trim() });
@@ -106,6 +97,15 @@ export default function AgendaPage({ almacen, fecha, onFecha }: Props) {
         })}
       </nav>
 
+      {fecha === hoy && almacen.tareasPasadas > 0 && arrastradas > 0 && (
+        <p className="flex items-center gap-2 rounded-2xl border border-pendiente/30 bg-pendiente/10 px-4 py-3 text-sm font-medium">
+          <Info size={18} className="shrink-0 text-pendiente" />
+          {arrastradas === 1
+            ? "Tienes 1 tarea sin terminar de días anteriores. Se ha pasado sola a hoy."
+            : `Tienes ${arrastradas} tareas sin terminar de días anteriores. Se han pasado solas a hoy.`}
+        </p>
+      )}
+
       <form onSubmit={anadir} className="flex flex-wrap gap-2 rounded-2xl border border-borde bg-superficie p-3">
         <input type="time" id="agenda-hora" aria-label="Hora (opcional)" value={hora} onChange={(e) => setHora(e.target.value)}
           className="h-11 rounded-xl border border-borde bg-fondo px-2 font-num text-sm" />
@@ -138,31 +138,22 @@ export default function AgendaPage({ almacen, fecha, onFecha }: Props) {
                   {n.texto}
                 </button>
               )}
+              {n.origen && n.origen < fecha && !n.hecha && (
+                <span className="mt-0.5 flex shrink-0 items-center gap-1 rounded-md bg-pendiente/15 px-1.5 py-0.5 text-[11px] font-bold text-pendiente"
+                  title="Tarea pendiente que se ha ido pasando de un día a otro">
+                  <History size={12} />
+                  {(() => {
+                    const d = diasLaborablesEntre(n.origen, fecha);
+                    return `desde ${corto(n.origen)} · ${d} día${d === 1 ? "" : "s"}`;
+                  })()}
+                </span>
+              )}
               <button onClick={() => borrar(fecha, n.id)} aria-label="Borrar nota" className="rounded-lg p-1 text-suave opacity-60 hover:text-pendiente hover:opacity-100">
                 <Trash2 size={16} />
               </button>
             </li>
           ))}
         </ul>
-      )}
-
-      {pendientes.length > 0 && (
-        <section className="rounded-2xl border border-pendiente/30 bg-pendiente/10 p-4">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-pendiente">Pendiente de días anteriores ({pendientes.length})</h2>
-          <ul className="mt-2 grid gap-1.5">
-            {pendientes.map(({ fecha: dia, nota }) => (
-              <li key={nota.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                <input type="checkbox" id={`pend-${nota.id}`} onChange={() => actualizar(dia, nota.id, { hecha: true })} className="h-4 w-4 accent-[rgb(var(--cumplido))]"
-                  aria-label="Marcar como hecha" />
-                <button onClick={() => onFecha(dia)} className="font-semibold capitalize text-pendiente hover:underline">{corto(dia)}</button>
-                <span className="min-w-0 flex-1">{nota.texto}</span>
-                <button onClick={() => pasarAHoy(dia, nota)} className="flex items-center gap-1 rounded-lg border border-pendiente/40 px-2 py-0.5 text-xs font-semibold text-pendiente">
-                  <ArrowDownToLine size={13} /> Pasar a hoy
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
       )}
 
       <section className="grid gap-2">

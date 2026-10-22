@@ -6,7 +6,7 @@
 //   Lo que gastes en enero sale primero de lo que te quede del año anterior.
 // - Lo pendiente de recuperar de las AP recuperables es una cuenta corriente:
 //   todo lo que te has cogido menos todo lo que has recuperado, sin importar el año.
-import { desdeISO, minutosPermiso, minutosRecuperacion, sumarDias, type Semana } from "./calculos";
+import { desdeISO, minutosPermiso, minutosRecuperacion, minutosTramo, sumarDias, type Semana, type TramoRecuperacion } from "./calculos";
 
 /** Lo que escribes a mano para cada año. */
 export type SaldoAnual = {
@@ -98,10 +98,46 @@ export function consumoAnual(semanas: Semana[], anio: number, saldoDe: (anio: nu
   };
 }
 
-/** Lo que te falta por recuperar de AP recuperables (negativo = has recuperado por adelantado). */
-export function pendienteDeRecuperar(semanas: Semana[]): { cogido: number; recuperado: number; pendiente: number } {
+/** Un tramo de recuperación con el día de AP recuperables del que sale. */
+export type TramoConOrigen = TramoRecuperacion & { minutos: number; origen: string };
+
+/** Todos los tramos de recuperación programados, ordenados por fecha y hora. */
+export function todosLosTramos(semanas: Semana[]): TramoConOrigen[] {
+  const lista: TramoConOrigen[] = [];
+  for (const s of semanas) {
+    const lunes = desdeISO(s.lunes);
+    s.dias.forEach((d, i) => {
+      if (d.tipo !== "ap-recuperables") return;
+      const f = sumarDias(lunes, i);
+      const origen = `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, "0")}-${String(f.getDate()).padStart(2, "0")}`;
+      for (const t of d.recuperaciones ?? []) lista.push({ ...t, minutos: minutosTramo(t), origen });
+    });
+  }
+  return lista.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.desde.localeCompare(b.desde));
+}
+
+/** Tramos de recuperación que caen en un día concreto ("2026-10-22"). */
+export const tramosDelDia = (semanas: Semana[], fecha: string) => todosLosTramos(semanas).filter((t) => t.fecha === fecha && t.minutos > 0);
+
+/**
+ * Cuenta de AP recuperables:
+ * - cogido: horas de AP recuperables que te has cogido
+ * - recuperado: tramos ya pasados (hasta hoy incluido) + recuperación escrita a mano en versiones anteriores
+ * - programado: tramos con fecha posterior a hoy
+ * - pendiente: lo que falta por recuperar (cogido − recuperado; negativo = recuperado por adelantado)
+ * - sinProgramar: lo pendiente que aún no tiene día asignado
+ */
+export function pendienteDeRecuperar(
+  semanas: Semana[],
+  hoyISO: string,
+): { cogido: number; recuperado: number; programado: number; pendiente: number; sinProgramar: number } {
   const sumar = (elegir: (s: Semana, i: number) => number) => usos(semanas, elegir).reduce((s, u) => s + u.cantidad, 0);
   const cogido = sumar((s, i) => (s.dias[i]?.tipo === "ap-recuperables" ? minutosPermiso(s.dias[i]!) : 0));
-  const recuperado = sumar((s, i) => (s.dias[i]?.tipo === "trabajo" ? minutosRecuperacion(s.dias[i]!) : 0));
-  return { cogido, recuperado, pendiente: cogido - recuperado };
+  const manual = sumar((s, i) => (s.dias[i]?.tipo === "trabajo" ? minutosRecuperacion(s.dias[i]!) : 0));
+  const tramos = todosLosTramos(semanas);
+  const hecho = tramos.filter((t) => t.fecha <= hoyISO).reduce((s, t) => s + t.minutos, 0);
+  const programado = tramos.filter((t) => t.fecha > hoyISO).reduce((s, t) => s + t.minutos, 0);
+  const recuperado = manual + hecho;
+  const pendiente = cogido - recuperado;
+  return { cogido, recuperado, programado, pendiente, sinProgramar: Math.max(0, pendiente - programado) };
 }

@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Palmtree, UserRound, RotateCcw, Hourglass, CalendarOff } from "lucide-react";
-import { formatoHoras } from "./calculos";
-import { consumoAnual, pendienteDeRecuperar, type SaldoAnual, type UsoDia } from "./saldos";
+import { desdeISO, fechaISO, formatoHoras } from "./calculos";
+import CampoHorasMinutos from "./CampoHorasMinutos";
+import { consumoAnual, pendienteDeRecuperar, todosLosTramos, type SaldoAnual, type UsoDia } from "./saldos";
 import type { Almacen } from "./useSemanas";
 
 type Props = { almacen: Almacen; anio: number; onAnio: (anio: number) => void };
@@ -34,19 +35,23 @@ function TarjetaSaldo({ titulo, icono: Icono, unidad, total, gastado, onTotal, i
           <span className="grid h-10 w-10 place-items-center rounded-xl bg-ausencia/15 text-ausencia"><Icono size={20} /></span>
           <h2 className="font-bold">{titulo}</h2>
         </div>
-        <label className="grid gap-1 text-right text-[11px] font-semibold uppercase tracking-wider text-suave" htmlFor={idCampo}>
-          Tienes
-          <span className="flex items-center justify-end gap-1.5">
-            <input id={idCampo} type="number" min={0} step={unidad === "dias" ? 1 : 0.25} inputMode="decimal"
-              className="w-20 rounded-lg border border-borde bg-fondo px-2 py-1.5 text-right font-num text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-principal"
-              value={total === 0 ? "" : unidad === "dias" ? total : total / 60} placeholder="0"
-              onChange={(e) => {
-                const n = e.target.value === "" ? 0 : Number(e.target.value.replace(",", "."));
-                if (Number.isFinite(n) && n >= 0) onTotal(unidad === "dias" ? Math.round(n) : Math.round(n * 60));
-              }} />
-            <span className="normal-case tracking-normal">{unidad === "dias" ? "días" : "h"}</span>
-          </span>
-        </label>
+        <div className="grid justify-items-end gap-1 text-[11px] font-semibold uppercase tracking-wider text-suave">
+          <label htmlFor={idCampo}>Tienes</label>
+          {unidad === "dias" ? (
+            <span className="flex items-center gap-1.5">
+              <input id={idCampo} type="number" min={0} step={1} inputMode="numeric"
+                className="w-16 rounded-lg border border-borde bg-fondo px-2 py-2 text-right font-num text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-principal"
+                value={total === 0 ? "" : total} placeholder="0"
+                onChange={(e) => {
+                  const n = e.target.value === "" ? 0 : Math.floor(Number(e.target.value));
+                  if (Number.isFinite(n) && n >= 0) onTotal(n);
+                }} />
+              <span className="normal-case tracking-normal">días</span>
+            </span>
+          ) : (
+            <CampoHorasMinutos id={idCampo} etiqueta={titulo} minutos={total} onCambiar={onTotal} maxHoras={999} destacado={false} />
+          )}
+        </div>
       </header>
 
       <div>
@@ -87,7 +92,9 @@ function TarjetaSaldo({ titulo, icono: Icono, unidad, total, gastado, onTotal, i
 export default function SaldosPage({ almacen, anio, onAnio }: Props) {
   const saldo = almacen.saldo(anio);
   const c = consumoAnual(almacen.semanas, anio, almacen.saldo);
-  const rec = pendienteDeRecuperar(almacen.semanas);
+  const hoyISO = fechaISO(new Date());
+  const rec = pendienteDeRecuperar(almacen.semanas, hoyISO);
+  const proximas = todosLosTramos(almacen.semanas).filter((t) => t.fecha > hoyISO && t.minutos > 0);
   const cambiar = (cambios: Partial<SaldoAnual>) => almacen.cambiarSaldo(anio, { ...saldo, ...cambios });
   const notaEnero = `Se pueden gastar hasta el 31 de enero de ${anio + 1}. En enero se gasta primero lo que quede del año anterior.`;
 
@@ -127,10 +134,27 @@ export default function SaldosPage({ almacen, anio, onAnio }: Props) {
             <p className={`whitespace-nowrap font-num text-xl font-bold tabular-nums ${rec.pendiente > 0 ? "text-pendiente" : "text-cumplido"}`}>
               {formatoHoras(Math.abs(rec.pendiente))}
             </p>
-            <p className="mt-1 text-xs text-suave">
-              Cogidas {formatoHoras(rec.cogido)} · Recuperadas {formatoHoras(rec.recuperado)}. Para recuperar, en un día de trabajo pulsa
-              «+ Añadir horas de recuperación de AP».
+            <p className="mt-1 font-num text-xs tabular-nums text-suave">
+              Cogidas {formatoHoras(rec.cogido)} · Recuperadas {formatoHoras(rec.recuperado)} · Programadas {formatoHoras(rec.programado)}
             </p>
+            {rec.sinProgramar > 0 && (
+              <p className="mt-1 text-xs font-semibold text-pendiente">
+                {formatoHoras(rec.sinProgramar)} sin día de recuperación. Prográmalas en el día en que cogiste las AP recuperables.
+              </p>
+            )}
+            {proximas.length > 0 && (
+              <ul className="mt-3 grid gap-1 border-t border-borde/60 pt-2 text-sm">
+                <li className="text-[11px] font-bold uppercase tracking-wider text-suave">Próximas recuperaciones</li>
+                {proximas.map((t) => (
+                  <li key={t.id} className="flex justify-between gap-3">
+                    <span className="capitalize">
+                      {desdeISO(t.fecha).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" })} · {t.desde}–{t.hasta}
+                    </span>
+                    <span className="font-num tabular-nums text-suave">{formatoHoras(t.minutos)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </TarjetaSaldo>
 
