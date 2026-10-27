@@ -73,3 +73,28 @@ export function buscarEnAgenda(agenda: Agenda, consulta: string): { fecha: strin
     .filter(({ nota }) => nota.texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().includes(q))
     .sort((a, b) => b.fecha.localeCompare(a.fecha));
 }
+
+/** Incidencia del servicio: lo que ha pasado durante el día (no es una tarea, no se marca ni se pasa a otro día). */
+export type Incidencia = { id: string; texto: string; hora: string; creada: number };
+export type Incidencias = Record<string, Incidencia[]>; // clave: fecha "2026-10-27"
+
+/** Ordena las incidencias por hora; las que no tienen hora, al final en el orden en que se apuntaron. */
+export function ordenarIncidencias(lista: Incidencia[]): Incidencia[] {
+  return [...lista].sort((a, b) => {
+    if (a.hora && b.hora) return a.hora.localeCompare(b.hora) || a.creada - b.creada;
+    if (a.hora) return -1;
+    if (b.hora) return 1;
+    return a.creada - b.creada;
+  });
+}
+
+/** Busca texto en todas las incidencias (sin acentos ni mayúsculas), las más recientes primero. */
+export function buscarIncidencias(incidencias: Incidencias, consulta: string): { fecha: string; incidencia: Incidencia }[] {
+  const limpiar = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const q = limpiar(consulta).trim();
+  if (!q) return [];
+  return Object.entries(incidencias)
+    .flatMap(([fecha, lista]) => lista.map((incidencia) => ({ fecha, incidencia })))
+    .filter(({ incidencia }) => limpiar(incidencia.texto).includes(q))
+    .sort((a, b) => b.fecha.localeCompare(a.fecha));
+}

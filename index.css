@@ -39,6 +39,50 @@
   color-scheme: dark;
 }
 
+/* Tema Blaugrana: azul y grana, con rayas en el menú */
+.tema-blaugrana {
+  --fondo: 236 240 248;
+  --superficie: 255 255 255;
+  --texto: 10 26 68;
+  --suave: 78 92 128;
+  --borde: 208 216 234;
+  --principal: 0 77 152;
+  --cumplido: 22 140 80;
+  --pendiente: 214 120 0;
+  --ausencia: 165 0 68;
+  --festivo: 22 150 70;
+  --naranja: 226 116 20;
+  --rojo: 200 30 50;
+  --gris: 118 126 140;
+  --acento: 165 0 68;
+  --dorado: 237 187 0;
+  color-scheme: light;
+}
+
+/* Tema Viajes: colores de atardecer y mar */
+.tema-viajes {
+  --fondo: 250 244 236;
+  --superficie: 255 253 250;
+  --texto: 38 34 46;
+  --suave: 110 100 112;
+  --borde: 232 220 206;
+  --principal: 14 116 144;
+  --cumplido: 22 140 90;
+  --pendiente: 214 112 30;
+  --ausencia: 150 80 170;
+  --festivo: 22 150 70;
+  --naranja: 232 112 40;
+  --rojo: 210 50 50;
+  --gris: 128 122 130;
+  --acento: 240 120 70;
+  --dorado: 245 180 60;
+  color-scheme: light;
+}
+
+.rayas-blaugrana {
+  background: repeating-linear-gradient(90deg, rgb(0 77 152) 0 22px, rgb(165 0 68) 22px 44px);
+}
+
 html, body, #root { height: 100%; }
 body {
   @apply bg-fondo text-texto font-sans antialiased;

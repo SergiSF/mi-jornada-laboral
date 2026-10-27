@@ -2,7 +2,7 @@
 import type { FranjaRecuperacion, Jornada, RegistroDia, Semana, TipoDia, TramoRecuperacion } from "./calculos";
 import { AJUSTES_INICIALES, type Ajustes, type Saldos } from "./baseDatos";
 import { SALDO_VACIO, type SaldoAnual } from "./saldos";
-import type { Agenda } from "./agenda";
+import type { Agenda, Incidencias } from "./agenda";
 import type { Extension } from "./extensiones";
 
 export type Copia = {
@@ -14,6 +14,7 @@ export type Copia = {
   saldos: Saldos;
   agenda: Agenda;
   extensiones: Extension[];
+  incidencias: Incidencias;
 };
 
 export function crearCopia(
@@ -23,6 +24,7 @@ export function crearCopia(
   agenda: Agenda,
   extensiones: Extension[],
   ahora: Date,
+  incidencias: Incidencias = {},
 ): Copia {
   return {
     aplicacion: "mi-jornada",
@@ -33,6 +35,7 @@ export function crearCopia(
     saldos,
     agenda,
     extensiones,
+    incidencias,
   };
 }
 
@@ -125,6 +128,7 @@ export function leerCopia(texto: string): { ok: true; copia: Copia } | { ok: fal
       saldos,
       agenda: esObjeto(datos.agenda) ? (datos.agenda as Agenda) : {},
       extensiones: Array.isArray(datos.extensiones) ? (datos.extensiones as Extension[]) : [],
+      incidencias: esObjeto(datos.incidencias) ? (datos.incidencias as Incidencias) : {},
     },
   };
 }

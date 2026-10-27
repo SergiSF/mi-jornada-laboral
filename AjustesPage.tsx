@@ -1,16 +1,20 @@
 import { useRef, useState, type ReactNode } from "react";
-import { Moon, Sun, Monitor, Download, Upload, Trash2, ShieldCheck } from "lucide-react";
-import type { Tema } from "./tema";
+import { Download, Upload, Trash2, ShieldCheck } from "lucide-react";
+import { NOMBRE_TEMA, type Tema } from "./tema";
+import { ICONO_TEMA } from "./Layout";
 import type { Jornada } from "./calculos";
 import type { Almacen } from "./useSemanas";
 import { crearCopia, leerCopia, nombreArchivoCopia, type Copia } from "./copia";
 
 type Props = { tema: Tema; onTema: (t: Tema) => void; almacen: Almacen };
 
-const TEMAS: { id: Tema; nombre: string; icono: typeof Sun }[] = [
-  { id: "claro", nombre: "Claro", icono: Sun },
-  { id: "oscuro", nombre: "Oscuro", icono: Moon },
-  { id: "sistema", nombre: "Sistema", icono: Monitor },
+/** Muestra de colores de cada tema para el selector. */
+const TEMAS: { id: Tema; muestra: string[] }[] = [
+  { id: "claro", muestra: ["#f3f4f7", "#2f4fd6"] },
+  { id: "oscuro", muestra: ["#11151d", "#8ea3ff"] },
+  { id: "sistema", muestra: ["#f3f4f7", "#11151d"] },
+  { id: "blaugrana", muestra: ["#004d98", "#a50044"] },
+  { id: "viajes", muestra: ["#f4845f", "#0e7490"] },
 ];
 
 function Bloque({ titulo, children }: { titulo: string; children: ReactNode }) {
@@ -33,7 +37,7 @@ export default function AjustesPage({ tema, onTema, almacen }: Props) {
 
   const exportar = () => {
     const ahora = new Date();
-    const texto = JSON.stringify(crearCopia(semanas, ajustes, almacen.saldos, almacen.agenda, almacen.extensiones, ahora), null, 2);
+    const texto = JSON.stringify(crearCopia(semanas, ajustes, almacen.saldos, almacen.agenda, almacen.extensiones, ahora, almacen.incidencias), null, 2);
     const url = URL.createObjectURL(new Blob([texto], { type: "application/json" }));
     const enlace = document.createElement("a");
     enlace.href = url;
@@ -119,17 +123,23 @@ export default function AjustesPage({ tema, onTema, almacen }: Props) {
       </Bloque>
 
       <Bloque titulo="Apariencia">
-        <div className="grid grid-cols-3 gap-2">
-          {TEMAS.map(({ id, nombre, icono: Icono }) => (
-            <button key={id} onClick={() => onTema(id)} aria-pressed={tema === id}
-              className={`flex flex-col items-center gap-2 rounded-xl border px-3 py-4 font-semibold transition-colors ${
-                tema === id ? "border-principal bg-principal/10 text-principal" : "border-borde text-suave hover:text-texto"
-              }`}>
-              <Icono size={22} />
-              {nombre}
-            </button>
-          ))}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          {TEMAS.map(({ id, muestra }) => {
+            const Icono = ICONO_TEMA[id];
+            return (
+              <button key={id} onClick={() => onTema(id)} aria-pressed={tema === id}
+                className={`flex flex-col items-center gap-2 rounded-xl border px-3 py-4 font-semibold transition-colors ${
+                  tema === id ? "border-principal bg-principal/10 text-principal" : "border-borde text-suave hover:text-texto"
+                }`}>
+                <span className="flex overflow-hidden rounded-full ring-1 ring-borde" aria-hidden="true">
+                  {muestra.map((c) => <span key={c} className="h-5 w-5" style={{ background: c }} />)}
+                </span>
+                <span className="flex items-center gap-1.5"><Icono size={16} /> {NOMBRE_TEMA[id]}</span>
+              </button>
+            );
+          })}
         </div>
+        <p className="text-xs text-suave">Blaugrana y Viajes son temas claros. El tema Viajes muestra cada día un destino distinto.</p>
       </Bloque>
 
       <Bloque titulo="Copia de seguridad">
@@ -168,7 +178,7 @@ export default function AjustesPage({ tema, onTema, almacen }: Props) {
         {confirmarBorrado ? (
           <div className="rounded-xl border border-pendiente/40 bg-pendiente/10 p-4 text-sm">
             <p className="font-semibold text-pendiente">
-              Vas a borrar {plural(semanas.length)}, los saldos anuales, la agenda, las extensiones y los ajustes. No se puede deshacer.
+              Vas a borrar {plural(semanas.length)}, los saldos anuales, la agenda, las incidencias, las extensiones y los ajustes. No se puede deshacer.
             </p>
             <div className="mt-3 flex gap-2">
               <button onClick={borrarTodo} className="rounded-lg bg-pendiente px-3 py-2 font-bold text-superficie">Borrar todo</button>

@@ -14,7 +14,7 @@ import {
   type Saldos,
 } from "./baseDatos";
 import { SALDO_VACIO, migrarTramosProgramados, type SaldoAnual } from "./saldos";
-import { arrastrarPendientes, type Agenda } from "./agenda";
+import { arrastrarPendientes, type Agenda, type Incidencias } from "./agenda";
 import type { Extension } from "./extensiones";
 import type { Copia } from "./copia";
 
@@ -39,7 +39,9 @@ export type Almacen = {
   cambiarSaldo: (anio: number, saldo: SaldoAnual) => void;
   saldos: Saldos;
   agenda: Agenda;
-  tareasPasadas: number; // tareas sin terminar que se han pasado solas a hoy al abrir la app
+  tareasPasadas: number;
+  incidencias: Incidencias;
+  cambiarIncidencias: (cambio: (prev: Incidencias) => Incidencias) => void; // tareas sin terminar que se han pasado solas a hoy al abrir la app
   cambiarAgenda: (cambio: (prev: Agenda) => Agenda) => void;
   extensiones: Extension[];
   cambiarExtensiones: (lista: Extension[]) => void;
@@ -61,6 +63,7 @@ export function useSemanas(): Almacen {
   const [saldos, setSaldos] = useState<Saldos>({});
   const [agenda, setAgenda] = useState<Agenda>({});
   const [tareasPasadas, setTareasPasadas] = useState(0);
+  const [incidencias, setIncidencias] = useState<Incidencias>({});
   const [extensiones, setExtensiones] = useState<Extension[]>([]);
 
   const fallo = () =>
@@ -70,7 +73,8 @@ export function useSemanas(): Almacen {
   useEffect(() => {
     pedirGuardadoPermanente();
     leerTodo()
-      .then(({ semanas: guardadas, ajustes: a, saldos: sal, agenda: ag, extensiones: ext }) => {
+      .then(({ semanas: guardadas, ajustes: a, saldos: sal, agenda: ag, extensiones: ext, incidencias: inc }) => {
+        setIncidencias(inc);
         // Recuperaciones programadas con la versión anterior: pasan a su día como franjas
         const { semanas, cambiadas } = migrarTramosProgramados(guardadas, (f) => semanaNueva(f, a.jornadaPorDefecto, a.contarPorDefecto));
         cambiadas.forEach((s) => guardarSemana(s).catch(fallo));
@@ -143,6 +147,14 @@ export function useSemanas(): Almacen {
     };
   }, []);
 
+  const cambiarIncidencias = useCallback((cambio: (prev: Incidencias) => Incidencias) => {
+    setIncidencias((prev) => {
+      const nuevas = cambio(prev);
+      guardarDato("incidencias", nuevas).catch(fallo);
+      return nuevas;
+    });
+  }, []);
+
   const cambiarExtensiones = useCallback((lista: Extension[]) => {
     setExtensiones(lista);
     guardarDato("extensiones", lista).catch(fallo);
@@ -181,6 +193,8 @@ export function useSemanas(): Almacen {
       setSaldos(copia.saldos);
       await guardarDato("agenda", copia.agenda);
       setAgenda(copia.agenda);
+      await guardarDato("incidencias", copia.incidencias);
+      setIncidencias(copia.incidencias);
       if (copia.extensiones.length > 0) {
         await guardarDato("extensiones", copia.extensiones);
         setExtensiones(copia.extensiones);
@@ -198,6 +212,8 @@ export function useSemanas(): Almacen {
     setSaldos({});
     await guardarDato("agenda", {});
     setAgenda({});
+    await guardarDato("incidencias", {});
+    setIncidencias({});
     await guardarDato("extensiones", []);
     setExtensiones([]);
     setMapa({});
@@ -215,6 +231,8 @@ export function useSemanas(): Almacen {
     saldos,
     agenda,
     tareasPasadas,
+    incidencias,
+    cambiarIncidencias,
     cambiarAgenda,
     extensiones,
     cambiarExtensiones,

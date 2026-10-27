@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { ChevronLeft, ChevronRight, Plus, Trash2, Search, X, NotebookPen, History, Info } from "lucide-react";
 import { DIAS_SEMANA, desdeISO, fechaISO, lunesDe, sumarDias } from "./calculos";
-import { buscarEnAgenda, diasLaborablesEntre, ordenarNotas, type Nota } from "./agenda";
+import { buscarEnAgenda, buscarIncidencias, diasLaborablesEntre, ordenarNotas, type Nota } from "./agenda";
+import IncidenciasDia from "./IncidenciasDia";
 import { nuevoId } from "./extensiones";
 import type { Almacen } from "./useSemanas";
 
@@ -25,6 +26,7 @@ export default function AgendaPage({ almacen, fecha, onFecha }: Props) {
   const notas = ordenarNotas(agenda[fecha] ?? []);
   const arrastradas = notas.filter((n) => !n.hecha && n.origen && n.origen < fecha).length;
   const resultados = buscarEnAgenda(agenda, consulta);
+  const resultadosIncidencias = buscarIncidencias(almacen.incidencias, consulta);
   const lunes = lunesDe(desdeISO(fecha));
   const hechas = notas.filter((n) => n.hecha).length;
 
@@ -86,7 +88,13 @@ export default function AgendaPage({ almacen, fecha, onFecha }: Props) {
                 activo ? "border-principal bg-principal text-superficie" : "border-borde bg-superficie hover:border-principal"
               }`}>
               <span className={`text-[11px] font-bold uppercase tracking-wider ${activo ? "" : dia === hoy ? "text-principal" : "text-suave"}`}>{nombre.slice(0, 3)}</span>
-              <span className="text-lg font-extrabold">{desdeISO(dia).getDate()}</span>
+              <span className="relative text-lg font-extrabold">
+                {desdeISO(dia).getDate()}
+                {(almacen.incidencias[dia]?.length ?? 0) > 0 && (
+                  <span className={`absolute -right-2.5 top-0.5 h-2 w-2 rounded-full ${activo ? "bg-superficie" : "bg-rojo"}`}
+                    aria-label="Hay incidencias este día" />
+                )}
+              </span>
               <span className={`h-5 min-w-5 rounded-full px-1.5 text-[11px] font-bold leading-5 ${
                 lista.length === 0 ? "opacity-0" : activo ? "bg-superficie/25" : sinHacer ? "bg-pendiente/15 text-pendiente" : "bg-cumplido/15 text-cumplido"
               }`}>
@@ -156,16 +164,29 @@ export default function AgendaPage({ almacen, fecha, onFecha }: Props) {
         </ul>
       )}
 
+      <IncidenciasDia almacen={almacen} fecha={fecha} />
+
       <section className="grid gap-2">
         <label className="flex items-center gap-3 rounded-2xl border border-borde bg-superficie px-4 py-2.5 focus-within:ring-2 focus-within:ring-principal">
           <Search size={18} className="text-suave" />
-          <input id="buscar-agenda" type="text" enterKeyHint="search" value={consulta} onChange={(e) => setConsulta(e.target.value)} placeholder="Buscar en toda la agenda"
+          <input id="buscar-agenda" type="text" enterKeyHint="search" value={consulta} onChange={(e) => setConsulta(e.target.value)} placeholder="Buscar en tareas e incidencias"
             className="w-full min-w-0 bg-transparent focus:outline-none" />
           {consulta && <button onClick={() => setConsulta("")} aria-label="Borrar búsqueda" className="text-suave"><X size={16} /></button>}
         </label>
         {consulta && (
           <ul className="overflow-hidden rounded-2xl border border-borde bg-superficie text-sm">
-            {resultados.length === 0 && <li className="px-4 py-3 text-suave">Nada coincide con «{consulta}».</li>}
+            {resultados.length === 0 && resultadosIncidencias.length === 0 && <li className="px-4 py-3 text-suave">Nada coincide con «{consulta}».</li>}
+            {resultadosIncidencias.map(({ fecha: dia, incidencia }) => (
+              <li key={incidencia.id} className="border-b border-borde/70 last:border-0">
+                <button onClick={() => { onFecha(dia); setConsulta(""); }} className="flex w-full gap-3 px-4 py-2.5 text-left hover:bg-fondo">
+                  <span className="w-28 shrink-0 font-semibold capitalize text-principal">{corto(dia)}</span>
+                  <span className="min-w-0">
+                    <span className="mr-1.5 rounded bg-rojo/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-rojo">Incidencia</span>
+                    {incidencia.texto}
+                  </span>
+                </button>
+              </li>
+            ))}
             {resultados.map(({ fecha: dia, nota }) => (
               <li key={nota.id} className="border-b border-borde/70 last:border-0">
                 <button onClick={() => { onFecha(dia); setConsulta(""); }} className="flex w-full gap-3 px-4 py-2.5 text-left hover:bg-fondo">

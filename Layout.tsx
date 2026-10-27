@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react";
-import { Moon, Sun, Monitor, Clock, Menu } from "lucide-react";
+import { Moon, Sun, Monitor, Clock, Menu, Shield, Plane, type LucideIcon } from "lucide-react";
 import { PANTALLAS, type Pantalla } from "./navegacion";
-import type { Tema } from "./tema";
+import { NOMBRE_TEMA, SIGUIENTE_TEMA, type Tema } from "./tema";
+import Postal from "./Postal";
 
 type Props = {
   actual: Pantalla;
@@ -11,11 +12,11 @@ type Props = {
   children: ReactNode;
 };
 
-const SIGUIENTE_TEMA: Record<Tema, Tema> = { sistema: "claro", claro: "oscuro", oscuro: "sistema" };
-const NOMBRE_TEMA: Record<Tema, string> = { sistema: "Tema del sistema", claro: "Tema claro", oscuro: "Tema oscuro" };
+export const ICONO_TEMA: Record<Tema, LucideIcon> = { claro: Sun, oscuro: Moon, sistema: Monitor, blaugrana: Shield, viajes: Plane };
 
 export default function Layout({ actual, onCambiar, tema, onTema, children }: Props) {
-  const IconoTema = tema === "claro" ? Sun : tema === "oscuro" ? Moon : Monitor;
+  const IconoTema = ICONO_TEMA[tema];
+  const textoTema = `Tema: ${NOMBRE_TEMA[tema]}`;
   const [masAbierto, setMasAbierto] = useState(false);
   const secundarias = PANTALLAS.filter((p) => !p.principal);
   const enMas = secundarias.some((p) => p.id === actual);
@@ -27,7 +28,8 @@ export default function Layout({ actual, onCambiar, tema, onTema, children }: Pr
   return (
     <div className="flex h-full">
       {/* Barra lateral: solo en pantallas grandes */}
-      <aside className="hidden md:flex w-60 shrink-0 flex-col border-r border-borde bg-superficie p-4">
+      <aside className="relative hidden md:flex w-60 shrink-0 flex-col border-r border-borde bg-superficie p-4">
+        {tema === "blaugrana" && <div className="rayas-blaugrana absolute inset-x-0 top-0 h-2" aria-hidden="true" />}
         <div className="flex items-center gap-2 px-2 py-3">
           <span className="grid h-9 w-9 place-items-center rounded-xl bg-principal text-superficie">
             <Clock size={20} />
@@ -57,13 +59,17 @@ export default function Layout({ actual, onCambiar, tema, onTema, children }: Pr
           className="mt-auto flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-suave hover:bg-fondo hover:text-texto"
         >
           <IconoTema size={18} />
-          {NOMBRE_TEMA[tema]}
+          {textoTema}
         </button>
       </aside>
 
       {/* Contenido */}
-      <main className="flex-1 overflow-y-auto pb-24 md:pb-0">
-        <div className="mx-auto max-w-5xl px-4 py-6 md:px-8 md:py-10">{children}</div>
+      <main className="relative flex-1 overflow-y-auto pb-24 md:pb-0">
+        {tema === "blaugrana" && <div className="rayas-blaugrana sticky top-0 z-[6] h-1.5 md:hidden" aria-hidden="true" />}
+        <div className="mx-auto max-w-5xl px-4 py-6 md:px-8 md:py-10">
+          {tema === "viajes" && <Postal />}
+          {children}
+        </div>
       </main>
 
       {/* Menú "Más" del móvil */}
@@ -81,7 +87,7 @@ export default function Layout({ actual, onCambiar, tema, onTema, children }: Pr
               </button>
             ))}
             <button onClick={() => onTema(SIGUIENTE_TEMA[tema])} className="flex items-center gap-3 rounded-xl px-3 py-3 font-semibold text-suave">
-              <IconoTema size={20} /> {NOMBRE_TEMA[tema]}
+              <IconoTema size={20} /> {textoTema}
             </button>
           </div>
         </div>

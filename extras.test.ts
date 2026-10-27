@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buscar, leerListado, separarNumeros, type Extension } from "./extensiones";
-import { ordenarNotas, arrastrarPendientes, primerLaborable, diasLaborablesEntre, buscarEnAgenda, type Agenda } from "./agenda";
+import { ordenarNotas, arrastrarPendientes, primerLaborable, diasLaborablesEntre, buscarEnAgenda, ordenarIncidencias, buscarIncidencias, type Agenda } from "./agenda";
 
 const lista: Extension[] = [
   { id: "1", area: "Mòdul 1", nombre: "Consulta Mèdica", numeros: ["3604"] },
@@ -48,4 +48,16 @@ describe("Agenda", () => {
   it("cuenta los días laborables entre dos fechas", () => expect(diasLaborablesEntre("2026-10-23", "2026-10-27")).toBe(2));
   it("busca texto en toda la agenda", () =>
     expect(buscarEnAgenda({ "2026-10-20": [{ ...n("a", "", 1), texto: "Llamar a Gestió Econòmica" }] }, "economica")).toHaveLength(1));
+});
+
+describe("Incidencias servicio", () => {
+  const inc = (id: string, hora: string, creada: number, texto = id) => ({ id, texto, hora, creada });
+  it("se ordenan por hora y las que no tienen hora van al final", () =>
+    expect(ordenarIncidencias([inc("a", "", 1), inc("b", "12:10", 2), inc("c", "08:45", 3)]).map((x) => x.id)).toEqual(["c", "b", "a"]));
+  it("se pueden buscar sin tener en cuenta acentos", () =>
+    expect(buscarIncidencias({ "2026-10-27": [inc("a", "09:00", 1, "Caída del sistema de fichaje en el Mòdul 3")] }, "modul")).toHaveLength(1));
+  it("no se pasan al día siguiente como las tareas", () => {
+    // las incidencias van en su propio apartado; arrastrarPendientes solo mueve tareas de la agenda
+    expect(arrastrarPendientes({}, "2026-10-28").movidas).toBe(0);
+  });
 });
