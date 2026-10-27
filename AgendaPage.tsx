@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Search, X, NotebookPen, History, Info } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, Search, X, NotebookPen, History, Info, AlertTriangle } from "lucide-react";
 import { DIAS_SEMANA, desdeISO, fechaISO, lunesDe, sumarDias } from "./calculos";
 import { buscarEnAgenda, buscarIncidencias, diasLaborablesEntre, ordenarNotas, type Nota } from "./agenda";
 import IncidenciasDia from "./IncidenciasDia";
@@ -14,7 +14,27 @@ const largo = (iso: string) => {
 };
 const corto = (iso: string) => desdeISO(iso).toLocaleDateString("es-ES", { weekday: "short", day: "numeric", month: "short" });
 
+type Vista = "agenda" | "incidencias";
+const CLAVE_VISTA = "mi-jornada-vista-agenda";
+
+function leerVista(): Vista {
+  try {
+    return localStorage.getItem(CLAVE_VISTA) === "incidencias" ? "incidencias" : "agenda";
+  } catch {
+    return "agenda";
+  }
+}
+
 export default function AgendaPage({ almacen, fecha, onFecha }: Props) {
+  const [vista, setVistaEstado] = useState<Vista>(leerVista);
+  const setVista = (v: Vista) => {
+    setVistaEstado(v);
+    try {
+      localStorage.setItem(CLAVE_VISTA, v);
+    } catch {
+      /* no pasa nada si no se puede recordar */
+    }
+  };
   const { agenda, cambiarAgenda } = almacen;
   const hoy = fechaISO(new Date());
   const [texto, setTexto] = useState("");
@@ -25,8 +45,10 @@ export default function AgendaPage({ almacen, fecha, onFecha }: Props) {
 
   const notas = ordenarNotas(agenda[fecha] ?? []);
   const arrastradas = notas.filter((n) => !n.hecha && n.origen && n.origen < fecha).length;
-  const resultados = buscarEnAgenda(agenda, consulta);
-  const resultadosIncidencias = buscarIncidencias(almacen.incidencias, consulta);
+  const resultados = vista === "agenda" ? buscarEnAgenda(agenda, consulta) : [];
+  const resultadosIncidencias = vista === "incidencias" ? buscarIncidencias(almacen.incidencias, consulta) : [];
+  const incidenciasDia = almacen.incidencias[fecha]?.length ?? 0;
+  const pendientesDia = notas.filter((n) => !n.hecha).length;
   const lunes = lunesDe(desdeISO(fecha));
   const hechas = notas.filter((n) => n.hecha).length;
 
@@ -62,7 +84,10 @@ export default function AgendaPage({ almacen, fecha, onFecha }: Props) {
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-principal">{fecha === hoy ? "Hoy" : "Agenda"}</p>
           <h1 className="text-2xl font-extrabold tracking-tight md:text-3xl">{largo(fecha)}</h1>
-          {notas.length > 0 && <p className="text-sm text-suave">{hechas} de {notas.length} hechas</p>}
+          {vista === "agenda" && notas.length > 0 && <p className="text-sm text-suave">{hechas} de {notas.length} hechas</p>}
+          {vista === "incidencias" && incidenciasDia > 0 && (
+            <p className="text-sm text-suave">{incidenciasDia} incidencia{incidenciasDia === 1 ? "" : "s"}</p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => onFecha(fechaISO(sumarDias(desdeISO(fecha), -1)))} aria-label="Día anterior"
@@ -75,12 +100,38 @@ export default function AgendaPage({ almacen, fecha, onFecha }: Props) {
         </div>
       </header>
 
-      {/* Semana: cada día con el número de notas */}
+      {/* Elegir entre la agenda diaria y las incidencias diarias */}
+      <div className="grid grid-cols-2 gap-1 rounded-2xl border border-borde bg-superficie p-1" role="tablist" aria-label="Qué quieres ver">
+        {([
+          { id: "agenda", nombre: "Agenda diaria", corto: "Agenda", icono: NotebookPen, cuenta: pendientesDia, color: "bg-principal" },
+          { id: "incidencias", nombre: "Incidencias diarias", corto: "Incidencias", icono: AlertTriangle, cuenta: incidenciasDia, color: "bg-rojo" },
+        ] as const).map(({ id, nombre, corto: nombreCorto, icono: Icono, cuenta, color }) => {
+          const activa = vista === id;
+          return (
+            <button key={id} role="tab" aria-selected={activa} onClick={() => setVista(id)}
+              className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold transition-colors ${
+                activa ? `${color} text-superficie shadow-sm` : "text-suave hover:bg-fondo hover:text-texto"
+              }`}>
+              <Icono size={17} />
+              <span className="sm:hidden">{nombreCorto}</span>
+              <span className="hidden sm:inline">{nombre}</span>
+              {cuenta > 0 && (
+                <span className={`rounded-full px-1.5 text-[11px] leading-5 ${activa ? "bg-superficie/25" : id === "incidencias" ? "bg-rojo/15 text-rojo" : "bg-pendiente/15 text-pendiente"}`}>
+                  {cuenta}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Semana: cada día con el número de notas o de incidencias */}
       <nav className="grid grid-cols-5 gap-2" aria-label="Días de la semana">
         {DIAS_SEMANA.map((nombre, i) => {
           const dia = fechaISO(sumarDias(lunes, i));
           const lista = agenda[dia] ?? [];
           const sinHacer = lista.filter((n) => !n.hecha).length;
+          const numIncidencias = almacen.incidencias[dia]?.length ?? 0;
           const activo = dia === fecha;
           return (
             <button key={dia} onClick={() => onFecha(dia)}
@@ -90,21 +141,31 @@ export default function AgendaPage({ almacen, fecha, onFecha }: Props) {
               <span className={`text-[11px] font-bold uppercase tracking-wider ${activo ? "" : dia === hoy ? "text-principal" : "text-suave"}`}>{nombre.slice(0, 3)}</span>
               <span className="relative text-lg font-extrabold">
                 {desdeISO(dia).getDate()}
-                {(almacen.incidencias[dia]?.length ?? 0) > 0 && (
+                {vista === "agenda" && numIncidencias > 0 && (
                   <span className={`absolute -right-2.5 top-0.5 h-2 w-2 rounded-full ${activo ? "bg-superficie" : "bg-rojo"}`}
                     aria-label="Hay incidencias este día" />
                 )}
               </span>
-              <span className={`h-5 min-w-5 rounded-full px-1.5 text-[11px] font-bold leading-5 ${
-                lista.length === 0 ? "opacity-0" : activo ? "bg-superficie/25" : sinHacer ? "bg-pendiente/15 text-pendiente" : "bg-cumplido/15 text-cumplido"
-              }`}>
-                {sinHacer || lista.length}
-              </span>
+              {vista === "agenda" ? (
+                <span className={`h-5 min-w-5 rounded-full px-1.5 text-[11px] font-bold leading-5 ${
+                  lista.length === 0 ? "opacity-0" : activo ? "bg-superficie/25" : sinHacer ? "bg-pendiente/15 text-pendiente" : "bg-cumplido/15 text-cumplido"
+                }`}>
+                  {sinHacer || lista.length}
+                </span>
+              ) : (
+                <span className={`h-5 min-w-5 rounded-full px-1.5 text-[11px] font-bold leading-5 ${
+                  numIncidencias === 0 ? "opacity-0" : activo ? "bg-superficie/25" : "bg-rojo/15 text-rojo"
+                }`}>
+                  {numIncidencias}
+                </span>
+              )}
             </button>
           );
         })}
       </nav>
 
+      {vista === "agenda" ? (
+        <>
       {fecha === hoy && almacen.tareasPasadas > 0 && arrastradas > 0 && (
         <p className="flex items-center gap-2 rounded-2xl border border-pendiente/30 bg-pendiente/10 px-4 py-3 text-sm font-medium">
           <Info size={18} className="shrink-0 text-pendiente" />
@@ -163,13 +224,16 @@ export default function AgendaPage({ almacen, fecha, onFecha }: Props) {
           ))}
         </ul>
       )}
+        </>
+      ) : (
+        <IncidenciasDia almacen={almacen} fecha={fecha} />
+      )}
 
-      <IncidenciasDia almacen={almacen} fecha={fecha} />
 
       <section className="grid gap-2">
         <label className="flex items-center gap-3 rounded-2xl border border-borde bg-superficie px-4 py-2.5 focus-within:ring-2 focus-within:ring-principal">
           <Search size={18} className="text-suave" />
-          <input id="buscar-agenda" type="text" enterKeyHint="search" value={consulta} onChange={(e) => setConsulta(e.target.value)} placeholder="Buscar en tareas e incidencias"
+          <input id="buscar-agenda" type="text" enterKeyHint="search" value={consulta} onChange={(e) => setConsulta(e.target.value)} placeholder={vista === "agenda" ? "Buscar en toda la agenda" : "Buscar en todas las incidencias"}
             className="w-full min-w-0 bg-transparent focus:outline-none" />
           {consulta && <button onClick={() => setConsulta("")} aria-label="Borrar búsqueda" className="text-suave"><X size={16} /></button>}
         </label>
