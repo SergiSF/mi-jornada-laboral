@@ -14,6 +14,11 @@
   --cumplido: 31 140 85;
   --pendiente: 196 120 10;
   --ausencia: 115 95 200;
+  /* Tipos de día en la vista mensual */
+  --festivo: 22 150 70;
+  --naranja: 226 116 20;
+  --rojo: 214 45 45;
+  --gris: 118 126 140;
   color-scheme: light;
 }
 
@@ -27,6 +32,10 @@
   --cumplido: 111 211 158;
   --pendiente: 240 179 92;
   --ausencia: 185 171 255;
+  --festivo: 86 214 128;
+  --naranja: 251 156 72;
+  --rojo: 248 113 113;
+  --gris: 160 168 182;
   color-scheme: dark;
 }
 

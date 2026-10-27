@@ -14,6 +14,10 @@ export default {
         cumplido: "rgb(var(--cumplido) / <alpha-value>)",
         pendiente: "rgb(var(--pendiente) / <alpha-value>)",
         ausencia: "rgb(var(--ausencia) / <alpha-value>)",
+        festivo: "rgb(var(--festivo) / <alpha-value>)",
+        naranja: "rgb(var(--naranja) / <alpha-value>)",
+        rojo: "rgb(var(--rojo) / <alpha-value>)",
+        gris: "rgb(var(--gris) / <alpha-value>)",
       },
       fontFamily: {
         sans: ["Figtree", "system-ui", "Segoe UI", "sans-serif"],

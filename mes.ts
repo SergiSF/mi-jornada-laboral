@@ -1,5 +1,6 @@
 // Cálculos para la vista mensual y el historial.
 import { balanceAcumulado, calcularDia, calcularSemana, fechaISO, lunesDe, type Semana, type ResultadoDia, type TipoDia } from "./calculos";
+import type { Agenda, Nota } from "./agenda";
 
 export type DiaMes = ResultadoDia & { fecha: Date; tipo: TipoDia; pasado: boolean };
 
@@ -58,3 +59,16 @@ export function evolucionBolsa(semanas: Semana[], hoy: Date): PuntoBolsa[] {
 }
 
 export { balanceAcumulado };
+
+/** Días del mes que tienen algo apuntado en la agenda, con sus notas (pendientes primero). */
+export function agendaDelMes(agenda: Agenda, anio: number, mes: number): { fecha: string; notas: Nota[]; pendientes: number }[] {
+  const prefijo = `${anio}-${String(mes + 1).padStart(2, "0")}-`;
+  return Object.entries(agenda)
+    .filter(([fecha, notas]) => fecha.startsWith(prefijo) && notas.length > 0)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([fecha, notas]) => ({
+      fecha,
+      notas: [...notas].sort((x, y) => Number(x.hecha) - Number(y.hecha) || (x.hora || "99").localeCompare(y.hora || "99") || x.creada - y.creada),
+      pendientes: notas.filter((n) => !n.hecha).length,
+    }));
+}

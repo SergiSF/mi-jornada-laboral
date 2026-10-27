@@ -27,6 +27,13 @@ export default function App() {
     window.scrollTo({ top: 0 });
   };
 
+  // Desde el mes: abrir la agenda de un día concreto
+  const irAAgenda = (fecha: string) => {
+    setFechaAgenda(fecha);
+    setPantalla("agenda");
+    window.scrollTo({ top: 0 });
+  };
+
   return (
     <Layout actual={pantalla} onCambiar={setPantalla} tema={tema} onTema={setTema}>
       {almacen.errorGuardado && (
@@ -41,7 +48,7 @@ export default function App() {
           {pantalla === "semana" && <SemanaPage almacen={almacen} lunes={lunesSemana} onLunes={setLunesSemana} />}
           {pantalla === "agenda" && <AgendaPage almacen={almacen} fecha={fechaAgenda} onFecha={setFechaAgenda} />}
           {pantalla === "extensiones" && <ExtensionesPage almacen={almacen} />}
-          {pantalla === "mes" && <MesPage almacen={almacen} onIrASemana={irASemana} />}
+          {pantalla === "mes" && <MesPage almacen={almacen} onIrASemana={irASemana} onIrAAgenda={irAAgenda} />}
           {pantalla === "historial" && <HistorialPage almacen={almacen} onIrASemana={irASemana} />}
           {pantalla === "saldos" && <SaldosPage almacen={almacen} anio={anioSaldos} onAnio={setAnioSaldos} />}
           {pantalla === "ajustes" && <AjustesPage tema={tema} onTema={setTema} almacen={almacen} />}
