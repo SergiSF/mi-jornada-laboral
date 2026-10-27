@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buscar, leerListado, separarNumeros, type Extension } from "./extensiones";
-import { ordenarNotas, arrastrarPendientes, primerLaborable, diasLaborablesEntre, buscarEnAgenda, ordenarIncidencias, buscarIncidencias, type Agenda } from "./agenda";
+import { ordenarNotas, arrastrarPendientes, primerLaborable, diasLaborablesEntre, buscarEnAgenda, ordenarIncidencias, buscarIncidencias, cuandoIncidencia, type Agenda } from "./agenda";
 
 const lista: Extension[] = [
   { id: "1", area: "Mòdul 1", nombre: "Consulta Mèdica", numeros: ["3604"] },
@@ -60,4 +60,25 @@ describe("Incidencias servicio", () => {
     // las incidencias van en su propio apartado; arrastrarPendientes solo mueve tareas de la agenda
     expect(arrastrarPendientes({}, "2026-10-28").movidas).toBe(0);
   });
+});
+
+describe("Incidencias con turno y franja", () => {
+  const base = { texto: "", creada: 1 };
+  it("ordena por la franja y, si no hay, por el turno", () =>
+    expect(
+      ordenarIncidencias([
+        { ...base, id: "noche", turno: "noche", hora: "" },
+        { ...base, id: "tarde-16", turno: "tarde", hora: "16:00" },
+        { ...base, id: "manana", turno: "manana", hora: "" },
+        { ...base, id: "sin-nada", hora: "" },
+      ]).map((x) => x.id),
+    ).toEqual(["manana", "tarde-16", "noche", "sin-nada"]));
+  it("escribe el turno y la franja juntos", () => {
+    expect(cuandoIncidencia({ ...base, id: "a", turno: "tarde", hora: "15:30", hasta: "16:10" })).toBe("Tarde · 15:30–16:10");
+    expect(cuandoIncidencia({ ...base, id: "b", hora: "08:45" })).toBe("08:45");
+    expect(cuandoIncidencia({ ...base, id: "c", turno: "noche", hora: "" })).toBe("Noche");
+  });
+  it("busca en el comentario", () =>
+    expect(buscarIncidencias({ "2026-10-27": [{ ...base, id: "a", texto: "Fallo del lector de fichaje", hora: "" }] }, "lector")).toHaveLength(1));
+
 });

@@ -74,23 +74,42 @@ export function buscarEnAgenda(agenda: Agenda, consulta: string): { fecha: strin
     .sort((a, b) => b.fecha.localeCompare(a.fecha));
 }
 
-/** Incidencia del servicio: lo que ha pasado durante el día (no es una tarea, no se marca ni se pasa a otro día). */
-export type Incidencia = { id: string; texto: string; hora: string; creada: number };
+/** Turnos del servicio. */
+export type Turno = "manana" | "tarde" | "noche";
+export const NOMBRE_TURNO: Record<Turno, string> = { manana: "Mañana", tarde: "Tarde", noche: "Noche" };
+const ORDEN_TURNO: Record<Turno, string> = { manana: "07:00", tarde: "15:00", noche: "23:00" };
+
+/**
+ * Incidencia del servicio: lo que ha pasado durante el día (no es una tarea, no se marca ni se pasa a otro día).
+ * - turno y franja (hora = desde, hasta): cuándo ha pasado
+ * - texto: el comentario libre
+ */
+export type Incidencia = { id: string; turno?: Turno; hora: string; hasta?: string; texto: string; creada: number };
 export type Incidencias = Record<string, Incidencia[]>; // clave: fecha "2026-10-27"
 
-/** Ordena las incidencias por hora; las que no tienen hora, al final en el orden en que se apuntaron. */
+/** Hora con la que se ordena: el inicio de la franja o, si no hay, el inicio del turno. */
+const claveOrden = (i: Incidencia) => i.hora || (i.turno ? ORDEN_TURNO[i.turno] : "");
+
+/** Ordena las incidencias por hora (o turno); las que no tienen ninguna de las dos, al final. */
 export function ordenarIncidencias(lista: Incidencia[]): Incidencia[] {
   return [...lista].sort((a, b) => {
-    if (a.hora && b.hora) return a.hora.localeCompare(b.hora) || a.creada - b.creada;
-    if (a.hora) return -1;
-    if (b.hora) return 1;
+    const ka = claveOrden(a), kb = claveOrden(b);
+    if (ka && kb) return ka.localeCompare(kb) || a.creada - b.creada;
+    if (ka) return -1;
+    if (kb) return 1;
     return a.creada - b.creada;
   });
 }
 
+/** "Mañana · 08:45–09:30", "08:45", "Tarde"… o "" si no hay datos. */
+export function cuandoIncidencia(i: Incidencia): string {
+  const franja = i.hora && i.hasta ? `${i.hora}–${i.hasta}` : i.hora || (i.hasta ? `hasta ${i.hasta}` : "");
+  return [i.turno ? NOMBRE_TURNO[i.turno] : "", franja].filter(Boolean).join(" · ");
+}
+
 /** Busca texto en todas las incidencias (sin acentos ni mayúsculas), las más recientes primero. */
 export function buscarIncidencias(incidencias: Incidencias, consulta: string): { fecha: string; incidencia: Incidencia }[] {
-  const limpiar = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const limpiar = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const q = limpiar(consulta).trim();
   if (!q) return [];
   return Object.entries(incidencias)
