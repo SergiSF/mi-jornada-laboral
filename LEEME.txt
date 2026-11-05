@@ -20,17 +20,10 @@ Publicarla gratis (recomendado, permite instalarla y usarla sin conexión):
 Probarla sin publicar: doble clic en index.html. Funciona y guarda datos,
 pero así NO se puede instalar ni usar sin conexión.
 
-Secciones clave:
-  - Calculadora semanal: herramienta temporal. NO guarda nada ni afecta al
-    calendario, al historial ni al saldo. Se vacía con «Limpiar campos» o al cerrar.
-  - Calendario: único sitio donde se registran las jornadas reales
-    (pulsa un día → «Guardar jornada» o «Cancelar»).
-
 Reglas de cálculo:
   - Tiempo trabajado = salida − entrada (sin pausas).
   - Diferencia del día = trabajado − jornada prevista de esa fecha.
-  - Saldo = saldo inicial + diferencias de las jornadas guardadas en el calendario
-    hasta hoy − recuperaciones.
+  - Saldo = saldo inicial + diferencias de días registrados hasta hoy − recuperaciones.
   - Días sin registrar, futuros, festivos, vacaciones, permisos y ausencias no computan.
   - Al cambiar de jornada se indica desde qué fecha: el pasado no se recalcula.
   - Si registras una recuperación y además la jornada de ese día (saliendo antes),

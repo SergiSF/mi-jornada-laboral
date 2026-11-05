@@ -4,7 +4,7 @@
    descarga en segundo plano la versión nueva (se verá al volver a abrir).
    Si cambias algún archivo, sube también este con VERSION aumentada.
    ===================================================================== */
-var VERSION = 'control-horario-v2';
+var VERSION = 'control-horario-v3';
 var FILES = [
   './',
   './index.html',

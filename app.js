@@ -1,7 +1,7 @@
 /* =====================================================================
    app.js — Pantallas y acciones de Control Horario
    ---------------------------------------------------------------------
-   Secciones: Inicio, Calculadora semanal, Calendario, Recuperaciones,
+   Secciones: Inicio, Control semanal, Calendario, Recuperaciones,
    Historial, Configuración y Copias de seguridad.
    Los cálculos están en calc.js y el guardado en storage.js.
    ===================================================================== */
@@ -14,7 +14,7 @@
   var state = null;
   var ui = {
     view: 'inicio',
-    openDay: null,
+    weekRef: C.todayStr(),
     calMonth: C.todayStr().slice(0, 7),
     histYear: +C.todayStr().slice(0, 4),
     histDate: C.todayStr(),
@@ -25,7 +25,7 @@
   function icon(name) {
     var p = {
       inicio: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/>',
-      calculadora: '<rect x="3" y="4" width="18" height="17" rx="3"/><path d="M7 7h10M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"/>',
+      semana: '<rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 13h3M8 17h3M14 13h2M14 17h2"/>',
       calendario: '<rect x="3" y="4" width="18" height="17" rx="3"/><path d="M3 9h18M8 2v4M16 2v4"/><circle cx="8" cy="14" r="1"/><circle cx="12" cy="14" r="1"/><circle cx="16" cy="14" r="1"/>',
       recuperaciones: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/>',
       historial: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>',
@@ -42,7 +42,7 @@
 
   var VIEWS = [
     { id: 'inicio', label: 'Inicio' },
-    { id: 'calculadora', label: 'Calculadora semanal', short: 'Calculadora' },
+    { id: 'semana', label: 'Control semanal', short: 'Semana' },
     { id: 'calendario', label: 'Calendario' },
     { id: 'recuperaciones', label: 'Recuperaciones', short: 'Recuperar' },
     { id: 'historial', label: 'Historial' },
@@ -132,7 +132,7 @@
     $('#sideNav').innerHTML = VIEWS.map(function (v) {
       return '<a href="#' + v.id + '" class="nav-item' + (ui.view === v.id ? ' active' : '') + '">' + icon(v.id) + '<span>' + v.label + '</span></a>';
     }).join('');
-    var main = ['inicio', 'calculadora', 'calendario', 'recuperaciones'];
+    var main = ['inicio', 'semana', 'calendario', 'recuperaciones'];
     var moreActive = main.indexOf(ui.view) === -1;
     $('#bottomNav').innerHTML = main.map(function (id) {
       var v = VIEWS.filter(function (x) { return x.id === id; })[0];
@@ -188,7 +188,7 @@
       '<div class="hero-value">' + C.fmtDiff(avail) + '</div>' +
       '<p class="hero-sub">' + sub + '</p>' +
       '<div class="hero-actions">' +
-      '<button class="btn btn-primary btn-lg" type="button" data-open-day="' + t + '">Registrar jornada</button>' +
+      '<a class="btn btn-primary btn-lg" href="#semana">Registrar horas</a>' +
       '<button class="btn btn-light btn-lg" type="button" id="heroRec">Registrar recuperación</button>' +
       '</div></section>';
 
@@ -231,13 +231,8 @@
 
     el.innerHTML = html;
     $('#heroRec').addEventListener('click', function () { recoveryModal(null); });
-    $all('[data-open-day]', el).forEach(function (b) { b.addEventListener('click', function () { openDayInCalendar(b.getAttribute('data-open-day')); }); });
-  }
-  // Las jornadas reales solo se registran desde el calendario.
-  function openDayInCalendar(d) {
-    ui.calMonth = d.slice(0, 7);
-    ui.openDay = d;
-    goto('calendario');
+    bindQuickToday(el, t);
+    $all('[data-day]', el).forEach(function (b) { b.addEventListener('click', function () { dayModal(b.getAttribute('data-day')); }); });
   }
   function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
   function stat(label, value, c) {
@@ -245,19 +240,53 @@
   }
   function row(k, v) { return '<div class="srow"><dt>' + k + '</dt><dd>' + v + '</dd></div>'; }
 
-  // Tarjeta "Hoy": solo muestra lo guardado. Para registrar, abre la ventana del calendario.
   function quickTodayCard(t) {
+    var rec = state.days[t];
+    var isWork = !rec || C.isWorkType(rec.type);
     var inf = C.dayInfo(state, t, t);
-    var txt;
-    if (inf.status === 'work') txt = 'Entrada ' + esc(inf.record.in) + ' · Salida ' + esc(inf.record.out) + ' · Trabajado <b>' + C.fmtDur(inf.worked) + '</b> · Diferencia <b class="' + cls(inf.diff) + '">' + C.fmtDiff(inf.diff) + '</b>';
-    else if (inf.status === 'nonwork') txt = 'Marcado como <b>' + C.TYPES[inf.record.type] + '</b> (no computa).';
-    else if (inf.status === 'invalid') txt = 'Entrada ' + esc(inf.record.in || '—') + ' guardada. Falta la hora de salida.';
-    else txt = 'Aún no has registrado la jornada de hoy. Jornada prevista: ' + C.fmtDur(inf.expected) + '.';
     return '<section class="card quick">' +
       '<div class="card-head"><h2>Hoy</h2><span class="muted">' + cap(C.fmtDateLong(t)) + '</span></div>' +
-      '<p class="quick-res">' + txt + '</p>' +
-      '<button class="btn btn-ghost" type="button" data-open-day="' + t + '">' + (inf.record ? 'Ver o modificar en el calendario' : 'Registrar en el calendario') + '</button>' +
+      (isWork ?
+        '<div class="quick-grid">' +
+        '<label class="field"><span>Entrada</span><input type="time" id="qIn" value="' + esc(rec && rec.in || '') + '"></label>' +
+        '<label class="field"><span>Salida</span><input type="time" id="qOut" value="' + esc(rec && rec.out || '') + '"></label>' +
+        '<button class="btn btn-primary" type="button" id="qSave">Guardar</button>' +
+        '</div>' +
+        '<p class="quick-res" id="qRes">' + quickText(inf) + '</p>'
+        : '<p>Hoy está marcado como <b>' + C.TYPES[rec.type] + '</b>. <button class="link" type="button" data-day="' + t + '">Cambiar</button></p>') +
       '</section>';
+  }
+  function quickText(inf) {
+    if (inf.status === 'work' || inf.status === 'future') {
+      return 'Trabajado: <b>' + C.fmtDur(inf.worked) + '</b> · Prevista: ' + C.fmtDur(inf.expected) + ' · Diferencia: <b class="' + cls(inf.diff) + '">' + C.fmtDiff(inf.diff) + '</b>';
+    }
+    return 'Jornada prevista: ' + C.fmtDur(inf.expected) + (inf.justified ? ' (descontada la recuperación)' : '') + '. Introduce la entrada y la salida.';
+  }
+  function bindQuickToday(el, t) {
+    var qIn = $('#qIn', el), qOut = $('#qOut', el), qSave = $('#qSave', el);
+    if (!qSave) return;
+    function preview() {
+      var tmp = cloneWithDay(t, { type: 'trabajo', in: qIn.value, out: qOut.value });
+      var inf = C.dayInfo(tmp, t, t);
+      $('#qRes', el).innerHTML = inf.status === 'invalid' && qIn.value && qOut.value ? '<span class="neg">La salida debe ser posterior a la entrada.</span>' : quickText(inf);
+    }
+    qIn.addEventListener('input', preview); qOut.addEventListener('input', preview);
+    qSave.addEventListener('click', function () {
+      var rec = { type: 'trabajo', in: qIn.value, out: qOut.value };
+      var old = state.days[t];
+      if (old && old.note) rec.note = old.note;
+      if (!qIn.value) return toast('Introduce la hora de entrada.', 'error');
+      if (!qOut.value) {
+        // Permite guardar solo la entrada; no computa hasta tener la salida.
+        state.days[t] = { type: 'trabajo', in: qIn.value, out: '' };
+        if (old && old.note) state.days[t].note = old.note;
+        return commit('Entrada guardada. Añade la salida cuando termines.');
+      }
+      var err = C.validateDay(rec);
+      if (err) return toast(err, 'error');
+      state.days[t] = rec;
+      commit('Jornada de hoy guardada');
+    });
   }
   function cloneWithDay(date, rec) {
     var days = {};
@@ -267,7 +296,7 @@
   }
 
   function weekStrip(ws, t) {
-    var html = '<section class="card"><div class="card-head"><h2>Esta semana</h2><a class="link" href="#calendario">Ver calendario</a></div><div class="strip">';
+    var html = '<section class="card"><div class="card-head"><h2>Esta semana</h2><a class="link" href="#semana">Ver tabla</a></div><div class="strip">';
     for (var i = 0; i < 5; i++) {
       var inf = ws.days[i];
       var c = 'st-empty', val = '—';
@@ -275,7 +304,7 @@
       else if (inf.status === 'nonwork') { c = 'st-nonwork'; val = C.TYPES[inf.record.type]; }
       else if (inf.status === 'future') { c = 'st-future'; val = 'Futuro'; }
       else if (inf.status === 'invalid') { c = 'st-empty'; val = 'Sin salida'; }
-      html += '<button type="button" class="chip ' + c + (inf.date === t ? ' is-today' : '') + '" data-open-day="' + inf.date + '">' +
+      html += '<button type="button" class="chip ' + c + (inf.date === t ? ' is-today' : '') + '" data-day="' + inf.date + '">' +
         '<span class="chip-day">' + C.DAY_NAMES[i].slice(0, 3) + ' ' + C.parseDate(inf.date).getDate() + '</span>' +
         '<span class="chip-val">' + val + '</span></button>';
     }
@@ -292,140 +321,142 @@
   }
 
   /* =====================================================================
-     2. CALCULADORA SEMANAL (herramienta temporal)
-     ---------------------------------------------------------------------
-     IMPORTANTE: esta sección NO lee ni escribe "state.days" ni las
-     recuperaciones. Sus datos viven solo en "calc" (memoria de la
-     pantalla) y no se guardan nunca: no van al calendario, al historial
-     ni al saldo. Se borran con «Limpiar campos» o al cerrar la app.
+     2. CONTROL SEMANAL
      ===================================================================== */
-  var calc = null;
-  function calcReset(keepMode) {
-    var mode = keepMode && calc ? calc.mode : null;
-    if (!mode) {
-      var cur = C.dailyTargetFor(state, today());
-      mode = cur === 450 ? 450 : cur === 420 ? 420 : cur;
+  function renderSemana(el) {
+    var t = today();
+    var mon = C.mondayOf(ui.weekRef);
+    var ws = C.weekSummary(state, mon, t);
+    var sun = C.addDays(mon, 6);
+    var y = C.parseDate(sun).getFullYear();
+
+    var html = '<section class="card">' +
+      '<div class="period-nav">' +
+      '<button class="icon-btn" type="button" id="wPrev" aria-label="Semana anterior">' + icon('prev') + '</button>' +
+      '<div class="period-title"><b>Semana del ' + C.fmtDayMonth(mon) + ' al ' + C.fmtDayMonth(C.addDays(mon, 4)) + '</b><span class="muted">' + y + '</span></div>' +
+      '<button class="icon-btn" type="button" id="wNext" aria-label="Semana siguiente">' + icon('next') + '</button>' +
+      '</div>' +
+      (C.mondayOf(t) !== mon ? '<div class="center"><button class="btn btn-ghost btn-sm" type="button" id="wToday">Ir a esta semana</button></div>' : '') +
+      '</section>';
+
+    html += '<section class="card wtable-card"><div class="wtable" role="table">' +
+      '<div class="wrow whead" role="row"><div>Día</div><div>Tipo</div><div>Entrada</div><div>Salida</div><div>Trabajado</div><div>Prevista</div><div>Diferencia</div><div></div></div>';
+    for (var i = 0; i < 7; i++) {
+      var d = C.addDays(mon, i);
+      if (i >= 5 && !state.days[d]) continue; // fin de semana solo si hay registro
+      html += weekRow(d, t);
     }
-    calc = { mode: mode, rows: [0, 1, 2, 3, 4].map(function () { return { in: '', out: '' }; }) };
-  }
+    html += '<div class="wrow wfoot" role="row"><div>Total semana</div><div></div><div></div><div></div>' +
+      '<div data-l="Trabajado">' + C.fmtDur(ws.worked) + '</div>' +
+      '<div data-l="Prevista">' + C.fmtDur(ws.expectedTotal) + '</div>' +
+      '<div data-l="Diferencia" class="' + cls(ws.diff) + '"><b>' + C.fmtDiff(ws.diff) + '</b></div><div></div></div>';
+    html += '</div>' +
+      '<p class="muted small pad">Tiempo trabajado = salida − entrada (sin pausas). Los días sin registrar no cuentan. Para un sábado o domingo, usa el calendario.</p>' +
+      '</section>';
 
-  function calcRowResult(r, target) {
-    var a = C.timeToMin(r.in), b = C.timeToMin(r.out);
-    if (a === null && b === null) return { state: 'empty' };
-    if (a === null || b === null) return { state: 'partial' };
-    if (b <= a) return { state: 'invalid' };
-    return { state: 'ok', worked: b - a, diff: b - a - target };
-  }
-
-  function calcTotals() {
-    var target = calc.mode, t = { worked: 0, diff: 0, filled: 0, extra: 0, missing: 0 };
-    calc.rows.forEach(function (r) {
-      var x = calcRowResult(r, target);
-      if (x.state !== 'ok') return;
-      t.worked += x.worked; t.diff += x.diff; t.filled++;
-      if (x.diff > 0) t.extra += x.diff; else t.missing -= x.diff;
-    });
-    t.weekTarget = target * 5;
-    t.expectedFilled = target * t.filled;
-    t.vsWeek = t.worked - t.weekTarget;
-    return t;
-  }
-
-  function renderCalculadora(el) {
-    if (!calc) calcReset();
-    var cur = C.dailyTargetFor(state, today());
-    var modes = [{ v: 420, l: '35 h semanales', s: '7 h al día' }, { v: 450, l: '37,5 h semanales', s: '7 h 30 min al día' }];
-    if (cur !== 420 && cur !== 450) modes.push({ v: cur, l: 'Mi jornada', s: C.fmtDur(cur) + ' al día' });
-
-    var html = '<section class="card notice calc-note">' +
-      '<b>Herramienta de cálculo.</b> Lo que escribas aquí <b>no se guarda</b> y no afecta al calendario, al historial ni a tu saldo real. ' +
-      'Para registrar una jornada real, usa el <a class="link" href="#calendario">Calendario</a>.</section>';
-
-    html += '<section class="card"><div class="card-head"><h2>Jornada para el cálculo</h2></div>' +
-      '<div class="seg" role="radiogroup">' + modes.map(function (m) {
-        return '<button type="button" role="radio" class="seg-btn' + (calc.mode === m.v ? ' active' : '') + '" aria-checked="' + (calc.mode === m.v) + '" data-mode="' + m.v + '"><b>' + m.l + '</b><small>' + m.s + '</small></button>';
-      }).join('') + '</div></section>';
-
-    html += '<section class="card wtable-card"><div class="wtable calc-table" role="table">' +
-      '<div class="wrow whead" role="row"><div>Día</div><div>Entrada</div><div>Salida</div><div>Trabajado</div><div>Prevista</div><div>Diferencia</div></div>';
-    calc.rows.forEach(function (r, i) {
-      html += '<div class="wrow" role="row" data-i="' + i + '">' +
-        '<div class="c-day"><b>' + C.DAY_NAMES[i] + '</b></div>' +
-        '<div class="c-in"><label><span class="m-lbl">Entrada</span><input type="time" class="k-in" value="' + esc(r.in) + '"></label></div>' +
-        '<div class="c-out"><label><span class="m-lbl">Salida</span><input type="time" class="k-out" value="' + esc(r.out) + '"></label></div>' +
-        '<div class="c-worked" data-l="Trabajado"></div>' +
-        '<div class="c-exp" data-l="Prevista"></div>' +
-        '<div class="c-diff" data-l="Diferencia"></div>' +
-        '<div class="c-msg"></div></div>';
-    });
-    html += '<div class="wrow wfoot" role="row"><div>Total</div><div></div><div></div>' +
-      '<div data-l="Trabajado" id="kW"></div><div data-l="Prevista" id="kE"></div><div data-l="Diferencia" id="kD"></div></div>' +
-      '</div></section>';
-
-    html += '<section class="card"><div class="card-head"><h2>Resultado de la calculadora</h2><span class="badge">No se guarda</span></div>' +
-      '<div id="kResult"></div>' +
-      '<div class="btn-row"><button class="btn btn-ghost" type="button" id="kClear">Limpiar campos</button></div>' +
-      '<p class="muted small">Este resultado es independiente de tu saldo real acumulado.</p></section>';
+    html += '<section class="stats">' +
+      stat('Extra esta semana', ws.extra ? '+' + C.fmtDur(ws.extra) : '0 min', ws.extra ? 'pos' : '') +
+      stat('Faltan esta semana', ws.missing ? '−' + C.fmtDur(ws.missing) : '0 min', ws.missing ? 'neg' : '') +
+      stat('Saldo anterior', C.fmtDiff(ws.previous), cls(ws.previous)) +
+      stat('Recuperado esta semana', ws.recovered ? '−' + C.fmtDur(ws.recovered) : '0 min', '') +
+      stat('Saldo al cierre de la semana', C.fmtDiff(ws.closing), cls(ws.closing)) +
+      '</section>';
 
     el.innerHTML = html;
-
-    $all('[data-mode]', el).forEach(function (b) {
-      b.addEventListener('click', function () { calc.mode = +b.getAttribute('data-mode'); render(); });
-    });
-    $all('.wrow[data-i]', el).forEach(function (row) {
-      var i = +row.getAttribute('data-i');
-      ['.k-in', '.k-out'].forEach(function (s) {
-        var f = $(s, row);
-        function onChange() {
-          calc.rows[i][s === '.k-in' ? 'in' : 'out'] = f.value;
-          updateCalc(el);
-        }
-        f.addEventListener('input', onChange); f.addEventListener('change', onChange);
-      });
-    });
-    $('#kClear').addEventListener('click', function () { calcReset(true); render(); toast('Campos limpiados'); });
-    updateCalc(el);
+    $('#wPrev').addEventListener('click', function () { ui.weekRef = C.addDays(mon, -7); render(); });
+    $('#wNext').addEventListener('click', function () { ui.weekRef = C.addDays(mon, 7); render(); });
+    if ($('#wToday')) $('#wToday').addEventListener('click', function () { ui.weekRef = t; render(); });
+    $all('.wrow[data-date]', el).forEach(function (r) { bindWeekRow(r, t); });
   }
 
-  function updateCalc(el) {
-    var target = calc.mode;
-    $all('.wrow[data-i]', el).forEach(function (row) {
-      var i = +row.getAttribute('data-i');
-      var x = calcRowResult(calc.rows[i], target);
-      $('.c-exp', row).textContent = C.fmtDur(target);
-      var w = $('.c-worked', row), d = $('.c-diff', row), m = $('.c-msg', row);
-      m.innerHTML = '';
-      if (x.state === 'ok') {
-        w.textContent = C.fmtDur(x.worked);
-        d.innerHTML = '<span class="pill pill-' + cls(x.diff) + '">' + C.fmtDiff(x.diff) + '</span>';
-      } else {
-        w.innerHTML = '<span class="muted">—</span>';
-        d.innerHTML = '<span class="muted">—</span>';
-        if (x.state === 'invalid') m.innerHTML = '<span class="neg">La salida debe ser posterior a la entrada.</span>';
-      }
-    });
-    var t = calcTotals();
-    $('#kW').textContent = C.fmtDur(t.worked);
-    $('#kE').textContent = C.fmtDur(t.expectedFilled);
-    $('#kD').innerHTML = '<b class="' + cls(t.diff) + '">' + C.fmtDiff(t.diff) + '</b>';
+  function weekRow(d, t) {
+    var rec = state.days[d] || null;
+    var type = rec ? rec.type : 'trabajo';
+    var i = C.weekdayIndex(d);
+    var badges = (d === t ? '<span class="badge badge-green">Hoy</span>' : '') + (d > t ? '<span class="badge">Futuro</span>' : '');
+    return '<div class="wrow' + (rec ? ' saved' : '') + '" role="row" data-date="' + d + '">' +
+      '<div class="c-day"><b>' + C.DAY_NAMES[i] + '</b><span class="muted">' + C.fmtDayMonth(d) + '</span>' + badges + '</div>' +
+      '<div class="c-type"><select aria-label="Tipo de día" class="f-type">' + typeOptions(type) + '</select></div>' +
+      '<div class="c-in"><label><span class="m-lbl">Entrada</span><input type="time" class="f-in" value="' + esc(rec && rec.in || '') + '"></label></div>' +
+      '<div class="c-out"><label><span class="m-lbl">Salida</span><input type="time" class="f-out" value="' + esc(rec && rec.out || '') + '"></label></div>' +
+      '<div class="c-worked" data-l="Trabajado"></div>' +
+      '<div class="c-exp" data-l="Prevista"></div>' +
+      '<div class="c-diff" data-l="Diferencia"></div>' +
+      '<div class="c-act">' +
+      '<button class="btn btn-primary btn-sm f-save" type="button">Guardar</button>' +
+      (rec ? '<button class="icon-btn f-del" type="button" title="Borrar registro" aria-label="Borrar registro">' + icon('trash') + '</button>' : '') +
+      '</div>' +
+      '<div class="c-msg"></div>' +
+      '</div>';
+  }
 
-    var main;
-    if (!t.filled) main = '<p class="muted">Introduce la entrada y la salida de algún día para ver el resultado.</p>';
-    else {
-      var verdict = t.diff > 0 ? 'Te sobran ' + C.fmtLong(t.diff) : t.diff < 0 ? 'Te faltan ' + C.fmtLong(t.diff) : 'Jornada exacta: ni te sobra ni te falta';
-      main = '<div class="recover-box recover-' + cls(t.diff) + '"><div class="recover-q">Resultado de los días introducidos</div>' +
-        '<div class="recover-a">' + C.fmtDiff(t.diff) + '</div><div>' + verdict + '.</div></div>' +
-        '<dl class="summary">' +
-        row('Días calculados', t.filled + ' de 5') +
-        row('Minutos de más', t.extra ? '<span class="pos">+' + C.fmtDur(t.extra) + '</span>' : '0 min') +
-        row('Minutos de menos', t.missing ? '<span class="neg">−' + C.fmtDur(t.missing) + '</span>' : '0 min') +
-        row('Horas trabajadas', C.fmtDur(t.worked)) +
-        row('Jornada semanal completa', C.fmtDur(t.weekTarget)) +
-        (t.filled < 5 ? row('Para completar la semana', t.vsWeek < 0 ? 'te faltan ' + C.fmtDur(t.vsWeek) : 'ya la superas en ' + C.fmtDur(t.vsWeek)) :
-          row('Respecto a la semana completa', '<span class="' + cls(t.vsWeek) + '">' + C.fmtDiff(t.vsWeek) + '</span>')) +
-        '</dl>';
+  function bindWeekRow(r, t) {
+    var d = r.getAttribute('data-date');
+    var fType = $('.f-type', r), fIn = $('.f-in', r), fOut = $('.f-out', r);
+    var saved = state.days[d] || null;
+
+    function current() {
+      var rec = { type: fType.value };
+      if (C.isWorkType(rec.type)) { rec.in = fIn.value; rec.out = fOut.value; }
+      if (saved && saved.note) rec.note = saved.note;
+      return rec;
     }
-    $('#kResult').innerHTML = main;
+    function isDirty() {
+      var c = current();
+      if (!saved) return !!(c.in || c.out) || !C.isWorkType(c.type);
+      return c.type !== saved.type || (c.in || '') !== (saved.in || '') || (c.out || '') !== (saved.out || '');
+    }
+    function update() {
+      var rec = current();
+      var work = C.isWorkType(rec.type);
+      r.classList.toggle('is-nonwork', !work);
+      var hasInput = work ? (rec.in || rec.out) : true;
+      var tmp = cloneWithDay(d, hasInput ? rec : null);
+      var inf = C.dayInfo(tmp, d, t);
+      var w = $('.c-worked', r), e = $('.c-exp', r), df = $('.c-diff', r), msg = $('.c-msg', r);
+      msg.textContent = '';
+      if (!work) {
+        w.innerHTML = '<span class="muted">—</span>';
+        e.innerHTML = '<span class="muted">No computa</span>';
+        df.innerHTML = '<span class="muted">—</span>';
+      } else {
+        e.innerHTML = C.fmtDur(inf.expected) + (inf.justified ? '<small class="muted"> (−' + C.fmtDur(inf.justified) + ' recup.)</small>' : '');
+        if (inf.status === 'work' || inf.status === 'future') {
+          w.textContent = C.fmtDur(inf.worked);
+          df.innerHTML = '<span class="pill pill-' + cls(inf.diff) + '">' + C.fmtDiff(inf.diff) + '</span>' + (inf.future ? '<small class="muted"> no computa aún</small>' : '');
+        } else {
+          w.innerHTML = '<span class="muted">—</span>';
+          df.innerHTML = '<span class="muted">—</span>';
+          if (rec.in && rec.out) msg.innerHTML = '<span class="neg">La salida debe ser posterior a la entrada.</span>';
+          else if (saved && rec.in && !rec.out) msg.innerHTML = '<span class="muted">Falta la hora de salida: este día aún no computa.</span>';
+        }
+      }
+      var dirty = isDirty();
+      r.classList.toggle('dirty', dirty);
+      $('.f-save', r).textContent = dirty ? 'Guardar' : (saved ? 'Guardado' : 'Guardar');
+      $('.f-save', r).disabled = !dirty;
+      if (dirty) msg.innerHTML = msg.innerHTML || '<span class="warn">Cambios sin guardar</span>';
+    }
+    [fType, fIn, fOut].forEach(function (f) { f.addEventListener('input', update); f.addEventListener('change', update); });
+    $('.f-save', r).addEventListener('click', function () {
+      var rec = current();
+      if (C.isWorkType(rec.type) && rec.in && !rec.out) {
+        state.days[d] = rec;
+        return commit('Entrada guardada. Falta la salida.');
+      }
+      var err = C.validateDay(rec);
+      if (err) { $('.c-msg', r).innerHTML = '<span class="neg">' + err + '</span>'; return; }
+      state.days[d] = rec;
+      commit(C.DAY_NAMES[C.weekdayIndex(d)] + ' guardado');
+    });
+    var del = $('.f-del', r);
+    if (del) del.addEventListener('click', function () {
+      confirmBox('Borrar registro', '¿Borrar el registro del ' + C.fmtDateLong(d) + '? El saldo se recalculará.', 'Borrar', function () {
+        delete state.days[d];
+        commit('Registro borrado');
+      }, true);
+    });
+    update();
   }
 
   /* =====================================================================
@@ -458,7 +489,6 @@
     var end = C.addDays(C.mondayOf(last), 6);
     for (var d = start; d <= end; d = C.addDays(d, 1)) html += calCell(d, t, d.slice(0, 7) === ui.calMonth);
     html += '</div>' +
-      '<p class="muted small cal-hint">Pulsa un día para registrar o modificar tu jornada real. Solo lo que guardes aquí cuenta para el saldo.</p>' +
       '<div class="legend"><span><i class="lg pos"></i>Más tiempo</span><span><i class="lg zero"></i>Jornada exacta</span><span><i class="lg neg"></i>Menos tiempo</span><span><i class="lg nonwork"></i>Festivo / vacaciones / permiso</span><span><i class="lg future"></i>Futuro (no computa)</span></div>' +
       '</section>';
 
@@ -490,7 +520,6 @@
     $('#cYear').addEventListener('change', function () { setMonth(+this.value, m); });
     if ($('#cToday')) $('#cToday').addEventListener('click', function () { ui.calMonth = t.slice(0, 7); render(); });
     $all('[data-day]', el).forEach(function (b) { b.addEventListener('click', function () { dayModal(b.getAttribute('data-day')); }); });
-    if (ui.openDay) { var od = ui.openDay; ui.openDay = null; dayModal(od); }
   }
 
   function calCell(d, t, inMonth) {
@@ -531,27 +560,35 @@
     return '<button type="button" class="litem" data-day="' + d + '"><span class="l-main"><b>' + cap(C.DAY_NAMES[C.weekdayIndex(d)]) + ' ' + C.fmtDayMonth(d) + '</b><span class="muted">' + mid + '</span></span>' + right + '</button>';
   }
 
-  /* ---------- Registrar / modificar una jornada (solo desde el calendario) ----------
-     Nada se guarda hasta pulsar «Guardar jornada». «Cancelar» cierra sin guardar. */
+  /* ---------- Editar un día (desde calendario o inicio) ---------- */
   function dayModal(d) {
     var t = today();
-    var saved = state.days[d] || null;
-    var rec = saved || { type: 'trabajo', in: '', out: '' };
-    var body =
-      '<label class="field"><span>Fecha</span><input type="date" id="mDate" value="' + d + '"></label>' +
+    var rec = state.days[d] || { type: C.isWeekend(d) ? 'trabajo' : 'trabajo', in: '', out: '' };
+    var exists = !!state.days[d];
+    var body = '<p class="muted">' + cap(C.fmtDateLong(d)) + (d > t ? ' · <b>fecha futura: no computará hasta ese día</b>' : '') + '</p>' +
+      '<label class="field"><span>Tipo de día</span><select id="mType">' + typeOptions(rec.type) + '</select></label>' +
       '<div class="two" id="mTimes">' +
       '<label class="field"><span>Hora de entrada</span><input type="time" id="mIn" value="' + esc(rec.in || '') + '"></label>' +
       '<label class="field"><span>Hora de salida</span><input type="time" id="mOut" value="' + esc(rec.out || '') + '"></label>' +
       '</div>' +
       '<label class="field"><span>Observaciones (opcional)</span><input type="text" id="mNote" maxlength="200" value="' + esc(rec.note || '') + '"></label>' +
-      '<details class="more-opts"' + (rec.type !== 'trabajo' ? ' open' : '') + '><summary>¿Festivo, vacaciones, permiso o ausencia?</summary>' +
-      '<label class="field"><span>Tipo de día</span><select id="mType">' + typeOptions(rec.type) + '</select></label>' +
-      '<p class="muted small">Los días que no son de trabajo no suman ni restan minutos.</p></details>' +
       '<div class="preview" id="mPrev"></div>' +
-      '<p class="err" id="mErr"></p>' +
-      (saved ? '<button type="button" class="link link-danger" id="mDel">Borrar esta jornada</button>' : '');
+      '<p class="err" id="mErr"></p>';
+    var buttons = [];
+    if (exists) buttons.push({ label: 'Borrar registro', cls: 'btn-danger-ghost', onClick: function () {
+      delete state.days[d]; commit('Registro borrado');
+    } });
+    buttons.push({ label: 'Cancelar' });
+    buttons.push({ label: 'Guardar', cls: 'btn-primary', onClick: function () {
+      var r = readModalDay();
+      if (C.isWorkType(r.type) && r.in && !r.out) { state.days[d] = r; commit('Entrada guardada. Falta la salida.'); return; }
+      var err = C.validateDay(r);
+      if (err) { $('#mErr').textContent = err; return false; }
+      state.days[d] = r;
+      commit('Día guardado');
+    } });
 
-    function read() {
+    function readModalDay() {
       var r = { type: $('#mType').value };
       if (C.isWorkType(r.type)) { r.in = $('#mIn').value; r.out = $('#mOut').value; }
       var note = $('#mNote').value.trim();
@@ -559,51 +596,24 @@
       return r;
     }
     function preview() {
-      var date = $('#mDate').value;
-      var r = read();
+      var r = readModalDay();
       var work = C.isWorkType(r.type);
       $('#mTimes').style.display = work ? '' : 'none';
       $('#mErr').textContent = '';
-      if (!C.isValidDate(date)) { $('#mPrev').innerHTML = 'Indica una fecha.'; return; }
-      var inf = C.dayInfo(cloneWithDay(date, r), date, t);
-      var html = '<b>' + cap(C.fmtDateLong(date)) + '</b><br>';
-      if (!work) html += 'Este día <b>no computa</b>: no suma ni resta minutos.';
-      else if (inf.status === 'work' || inf.status === 'future') html += 'Trabajado: <b>' + C.fmtDur(inf.worked) + '</b> · Prevista: ' + C.fmtDur(inf.expected) + ' · Diferencia: <b class="' + cls(inf.diff) + '">' + C.fmtDiff(inf.diff) + '</b>';
-      else html += 'Jornada prevista: ' + C.fmtDur(inf.expected);
-      if (date > t) html += '<br><small>Fecha futura: no contará en el saldo hasta ese día.</small>';
+      var inf = C.dayInfo(cloneWithDay(d, r), d, t);
+      var html = '';
+      if (!work) html = 'Este día <b>no computa</b>: no suma ni resta minutos.';
+      else if (inf.status === 'work' || inf.status === 'future') html = 'Trabajado: <b>' + C.fmtDur(inf.worked) + '</b> · Prevista: ' + C.fmtDur(inf.expected) + ' · Diferencia: <b class="' + cls(inf.diff) + '">' + C.fmtDiff(inf.diff) + '</b>';
+      else html = 'Jornada prevista: ' + C.fmtDur(inf.expected);
       if (inf.recovered) html += '<br><small>Este día tiene ' + C.fmtDur(inf.recovered) + ' registrados como recuperación' + (inf.justified ? ': no se restan otra vez al salir antes.' : '.') + '</small>';
-      if (date !== d && state.days[date]) html += '<br><span class="warn">Ese día ya tiene una jornada guardada: se sustituirá.</span>';
       $('#mPrev').innerHTML = html;
     }
-    function save() {
-      var date = $('#mDate').value;
-      if (!C.isValidDate(date)) { $('#mErr').textContent = 'Indica una fecha válida.'; return false; }
-      var r = read();
-      if (!(C.isWorkType(r.type) && r.in && !r.out)) {
-        var err = C.validateDay(r);
-        if (err) { $('#mErr').textContent = err; return false; }
-      }
-      if (saved && date !== d) delete state.days[d];   // se ha cambiado la fecha: se mueve el registro
-      state.days[date] = r;
-      ui.calMonth = date.slice(0, 7);
-      commit(C.isWorkType(r.type) && !r.out ? 'Entrada guardada. Falta la salida.' : 'Jornada guardada');
-    }
-
     openModal({
-      title: saved ? 'Modificar jornada' : 'Registrar jornada',
+      title: exists ? 'Modificar registro' : 'Registrar día',
       body: body,
-      buttons: [
-        { label: 'Cancelar' },
-        { label: 'Guardar jornada', cls: 'btn-primary', onClick: save }
-      ],
+      buttons: buttons,
       onOpen: function (b) {
-        ['#mDate', '#mType', '#mIn', '#mOut'].forEach(function (s) { $(s, b).addEventListener('input', preview); $(s, b).addEventListener('change', preview); });
-        if ($('#mDel', b)) $('#mDel', b).addEventListener('click', function () {
-          closeModal();
-          confirmBox('Borrar jornada', '¿Borrar la jornada del ' + C.fmtDateLong(d) + '? El saldo se recalculará.', 'Borrar', function () {
-            delete state.days[d]; commit('Jornada borrada');
-          }, true);
-        });
+        ['#mType', '#mIn', '#mOut'].forEach(function (s) { $(s, b).addEventListener('input', preview); $(s, b).addEventListener('change', preview); });
         preview();
       }
     });
@@ -765,12 +775,12 @@
         '<div data-l="Saldo" class="' + cls(ws.closing) + '"><b>' + C.fmtDiff(ws.closing) + '</b></div></button>');
     }
     html += (weekRows.length ? weekRows.join('') : '<p class="muted pad">No hay semanas con datos en este año.</p>') + '</div>' +
-      '<p class="muted small">Pulsa una semana o un mes para verlo en el calendario.</p></section>';
+      '<p class="muted small">Pulsa una semana para abrirla en el control semanal, o un mes para verlo en el calendario.</p></section>';
 
     el.innerHTML = html;
     $('#hDate').addEventListener('change', function () { if (C.isValidDate(this.value)) { ui.histDate = this.value; render(); } });
     $('#hYear').addEventListener('change', function () { ui.histYear = +this.value; render(); });
-    $all('[data-week]', el).forEach(function (b) { b.addEventListener('click', function () { ui.calMonth = b.getAttribute('data-week').slice(0, 7); goto('calendario'); }); });
+    $all('[data-week]', el).forEach(function (b) { b.addEventListener('click', function () { ui.weekRef = b.getAttribute('data-week'); goto('semana'); }); });
     $all('[data-month]', el).forEach(function (b) { b.addEventListener('click', function () { ui.calMonth = b.getAttribute('data-month'); goto('calendario'); }); });
   }
 
@@ -1060,7 +1070,7 @@
   window.addEventListener('appinstalled', function () { ui.installPrompt = null; $('#installBtn').classList.add('hidden'); toast('Aplicación instalada'); });
 
   var RENDER = {
-    inicio: renderInicio, calculadora: renderCalculadora, calendario: renderCalendario,
+    inicio: renderInicio, semana: renderSemana, calendario: renderCalendario,
     recuperaciones: renderRecuperaciones, historial: renderHistorial,
     configuracion: renderConfiguracion, copias: renderCopias
   };
@@ -1068,7 +1078,6 @@
   /* ---------- Arranque ---------- */
   function fromHash() {
     var h = (location.hash || '').replace('#', '');
-    if (h === 'semana') h = 'calculadora';
     return RENDER[h] ? h : 'inicio';
   }
   window.addEventListener('hashchange', function () {
@@ -1081,7 +1090,7 @@
   var lastDay = C.todayStr();
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible' && C.todayStr() !== lastDay) {
-      lastDay = C.todayStr(); render();
+      lastDay = C.todayStr(); ui.weekRef = lastDay; render();
     }
   });
 

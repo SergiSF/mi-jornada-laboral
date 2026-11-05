@@ -224,21 +224,6 @@ input[type=time] { font-size: 1.05rem; font-weight: 600; }
 .wrow.is-nonwork .c-in, .wrow.is-nonwork .c-out { visibility: hidden; }
 .c-exp small { display: block; }
 
-/* ---------- Calculadora semanal ---------- */
-.calc-note { border-left: 5px solid #e0b453; }
-.seg { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
-.seg-btn {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 14px; text-align: left;
-  border: 1.5px solid var(--border); background: #fff; border-radius: 12px; font: inherit; color: inherit; cursor: pointer;
-}
-.seg-btn small { color: var(--muted); }
-.seg-btn.active { border-color: var(--green); background: var(--green-soft); color: var(--green-dark); }
-.calc-table .wrow { grid-template-columns: 1fr 1.2fr 1.2fr 1fr 1fr 1fr; }
-.link-danger { color: var(--red); margin-top: 4px; }
-.more-opts { margin: 0 0 12px; }
-.more-opts summary { color: var(--muted); font-size: .9rem; margin-bottom: 8px; }
-.cal-hint { margin: 10px 0 0; }
-
 /* ---------- Calendario ---------- */
 .cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin-top: 14px; }
 .cal-h { text-align: center; font-size: .8rem; font-weight: 700; color: var(--muted); padding: 4px 0; }
@@ -384,11 +369,6 @@ details summary { cursor: pointer; padding: 2px 0; }
   .m-lbl { display: block; font-size: .78rem; color: var(--muted); font-weight: 600; margin-bottom: 3px; }
   [data-l]::before { content: attr(data-l); display: block; font-size: .74rem; color: var(--muted); font-weight: 600; }
   .wfoot { grid-template-areas: "t t t" "worked exp diff"; }
-  .calc-table .wrow { grid-template-columns: 1fr 1fr 1fr; grid-template-areas: "day day day" "in in out" "worked exp diff" "msg msg msg"; }
-  .calc-table .wfoot { grid-template-areas: "t t t" "worked exp diff"; }
-  .calc-table .wfoot > div:nth-child(4) { grid-area: worked; }
-  .calc-table .wfoot > div:nth-child(5) { grid-area: exp; }
-  .calc-table .wfoot > div:nth-child(6) { grid-area: diff; }
   .wfoot > div:first-child { grid-area: t; }
   .wfoot > div:empty { display: none; }
   .wfoot > div:nth-child(5) { grid-area: worked; }
